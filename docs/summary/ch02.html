@@ -4,7 +4,322 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>第 2 章：初识 AspectJ | AspectJ in Action 图解笔记</title>
-<link rel="stylesheet" href="assets/style.css">
+<style>
+/* AspectJ in Action -- beginner-friendly chapter guide styles
+   Shared by index.html and every chXX.html / appendix*.html page. */
+
+:root {
+  --bg: #f6f7fb;
+  --bg-panel: #ffffff;
+  --bg-code: #f0f2f8;
+  --bg-code-header: #e3e7f2;
+  --text: #1c2130;
+  --text-dim: #55607a;
+  --border: #dde1ee;
+  --accent: #5b5bd6;
+  --accent-dim: #eceafc;
+  --accent-text: #3f3fb0;
+  --good: #1a7f5a;
+  --good-bg: #e6f6ef;
+  --warn: #a15c00;
+  --warn-bg: #fdf1de;
+  --old: #b0203a;
+  --old-bg: #fbe9ec;
+  --new: #146c43;
+  --new-bg: #e7f6ee;
+  --shadow: 0 1px 2px rgba(30, 34, 54, 0.06), 0 8px 24px rgba(30, 34, 54, 0.05);
+  --radius: 14px;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14161f;
+    --bg-panel: #1b1e2a;
+    --bg-code: #11131b;
+    --bg-code-header: #23273a;
+    --text: #e7e9f5;
+    --text-dim: #a4aac4;
+    --border: #2b2f42;
+    --accent: #9090f5;
+    --accent-dim: #262a44;
+    --accent-text: #b3b3fb;
+    --good: #4fd39a;
+    --good-bg: #123527;
+    --warn: #eab766;
+    --warn-bg: #3a2c11;
+    --old: #f18b9a;
+    --old-bg: #3a1620;
+    --new: #7ee2ae;
+    --new-bg: #10301f;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35);
+  }
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, "PingFang SC", "Segoe UI", "Noto Sans SC", Helvetica, Arial, sans-serif;
+  line-height: 1.75;
+}
+
+.page {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 28px 20px 90px;
+}
+
+.topbar {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 14px 20px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.topbar a { color: var(--text-dim); text-decoration: none; }
+.topbar a:hover { color: var(--accent-text); }
+
+h1, h2, h3, h4 { line-height: 1.35; letter-spacing: -0.01em; }
+h1 { font-size: 30px; margin: 6px 0 6px; }
+h2 { font-size: 22px; margin: 46px 0 14px; padding-top: 10px; border-top: 1px solid var(--border); }
+h3 { font-size: 18px; margin: 30px 0 10px; color: var(--accent-text); }
+h4 { font-size: 15px; margin: 20px 0 8px; }
+p { margin: 12px 0; }
+ul, ol { padding-left: 22px; }
+li { margin: 6px 0; }
+a { color: var(--accent-text); }
+
+.kicker {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--accent-text);
+  background: var(--accent-dim);
+  padding: 3px 10px;
+  border-radius: 999px;
+  margin-bottom: 10px;
+}
+
+.subtitle { color: var(--text-dim); font-size: 16px; margin-top: 0; }
+
+.covers {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  margin: 20px 0 8px;
+  box-shadow: var(--shadow);
+}
+.covers h4 { margin-top: 0; color: var(--text-dim); font-weight: 600; }
+.covers ul { margin: 6px 0 0; }
+
+/* ---- callouts ---- */
+.callout {
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  margin: 18px 0;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+.callout > .label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+  display: block;
+}
+.callout.tip { background: var(--good-bg); border-color: var(--good); }
+.callout.tip > .label { color: var(--good); }
+.callout.warn { background: var(--warn-bg); border-color: var(--warn); }
+.callout.warn > .label { color: var(--warn); }
+.callout.modern { background: var(--accent-dim); border-color: var(--accent); }
+.callout.modern > .label { color: var(--accent-text); }
+.callout p:first-child { margin-top: 0; }
+.callout p:last-child { margin-bottom: 0; }
+
+/* ---- old vs new version compare table ---- */
+.versus {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 16px 0;
+}
+@media (max-width: 620px) { .versus { grid-template-columns: 1fr; } }
+.versus .col {
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+}
+.versus .old { background: var(--old-bg); }
+.versus .new { background: var(--new-bg); }
+.versus .col .tag {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.versus .old .tag { color: var(--old); }
+.versus .new .tag { color: var(--new); }
+.versus .col ul { margin: 8px 0 0; padding-left: 18px; font-size: 14px; }
+
+/* ---- code blocks ---- */
+.code {
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin: 16px 0;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+.code .file {
+  background: var(--bg-code-header);
+  color: var(--text-dim);
+  font-size: 12px;
+  padding: 7px 14px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  border-bottom: 1px solid var(--border);
+}
+.code pre {
+  margin: 0;
+  padding: 14px 16px;
+  background: var(--bg-code);
+  overflow-x: auto;
+}
+.code code, pre code {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 13.2px;
+  white-space: pre;
+}
+code.inline {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  background: var(--bg-code);
+  border: 1px solid var(--border);
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-size: 0.9em;
+}
+.tok-kw { color: #8250df; }
+.tok-ann { color: #966600; font-weight: 600; }
+@media (prefers-color-scheme: dark) { .tok-ann { color: #eab766; } .tok-kw { color: #c9a8ff; } }
+.tok-str { color: #0a7d4b; }
+@media (prefers-color-scheme: dark) { .tok-str { color: #7ee2ae; } }
+.tok-cm { color: var(--text-dim); font-style: italic; }
+.tok-type { color: #0550ae; }
+@media (prefers-color-scheme: dark) { .tok-type { color: #8ab4f8; } }
+
+/* ---- diagrams ---- */
+.diagram {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin: 20px 0;
+  box-shadow: var(--shadow);
+  overflow-x: auto;
+}
+.diagram svg { display: block; margin: 0 auto; max-width: 100%; height: auto; }
+.diagram .caption {
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  margin-top: 10px;
+}
+.diagram text { fill: var(--text); font-family: -apple-system, "PingFang SC", "Noto Sans SC", sans-serif; }
+.diagram .dim { fill: var(--text-dim); }
+.diagram .box { fill: var(--bg-code); stroke: var(--border); }
+.diagram .accentbox { fill: var(--accent-dim); stroke: var(--accent); }
+.diagram .oldbox { fill: var(--old-bg); stroke: var(--old); }
+.diagram .newbox { fill: var(--new-bg); stroke: var(--new); }
+.diagram .arrow { stroke: var(--text-dim); stroke-width: 1.6; fill: none; marker-end: url(#arrow); }
+.diagram .arrow-accent { stroke: var(--accent); stroke-width: 2; fill: none; marker-end: url(#arrowAccent); }
+
+table.tbl { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; }
+table.tbl th, table.tbl td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
+table.tbl th { background: var(--bg-code-header); }
+
+.exercise {
+  background: var(--bg-panel);
+  border: 1px dashed var(--accent);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  margin: 18px 0;
+}
+.exercise .label { color: var(--accent-text); font-weight: 700; font-size: 13px; }
+
+.quiz { list-style: none; padding-left: 0; }
+.quiz li {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin: 8px 0;
+}
+.quiz .q { font-weight: 600; }
+.quiz .a { color: var(--text-dim); margin-top: 6px; font-size: 14px; display: none; }
+.quiz li.open .a { display: block; }
+.quiz .q::before { content: "▸ "; color: var(--accent); }
+
+.pagenav {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 56px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+}
+.pagenav a {
+  text-decoration: none;
+  color: var(--text);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 16px;
+  flex: 1;
+  box-shadow: var(--shadow);
+}
+.pagenav a:hover { border-color: var(--accent); }
+.pagenav .lbl { display: block; font-size: 11px; color: var(--text-dim); margin-bottom: 2px; }
+.pagenav .next { text-align: right; }
+
+.toc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+  margin: 22px 0;
+}
+.toc-card {
+  display: block;
+  text-decoration: none;
+  color: var(--text);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  box-shadow: var(--shadow);
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+.toc-card:hover { transform: translateY(-2px); border-color: var(--accent); }
+.toc-card .num { font-size: 12px; color: var(--accent-text); font-weight: 700; }
+.toc-card .ttl { font-size: 16px; font-weight: 700; margin: 4px 0 6px; }
+.toc-card .desc { font-size: 13px; color: var(--text-dim); }
+.toc-part {
+  margin: 34px 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+</style>
 </head>
 <body>
 <div class="topbar">
@@ -310,6 +625,11 @@
     <a class="next" href="ch03.html"><span class="lbl">下一章</span>第 3 章：理解连接点模型</a>
   </div>
 </div>
-<script src="assets/site.js"></script>
+<script>
+document.addEventListener("click", function (e) {
+  var q = e.target.closest(".quiz .q");
+  if (q) q.parentElement.classList.toggle("open");
+});
+</script>
 </body>
 </html>
