@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第 7 章：深入 @AspectJ 注解语法 | AspectJ in Action 图解笔记</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar">
+  <a href="index.html">&larr; 全部章节</a>
+  <span>AspectJ in Action · 图解笔记</span>
+</div>
+<div class="page">
+
+  <span class="kicker">CHAPTER 07</span>
+  <h1>深入 @AspectJ 注解语法</h1>
+  <p class="subtitle">一句话概括本章：前几章你看到的都是 <code class="inline">aspect</code> / <code class="inline">pointcut</code> 这种“专属关键字”写法（传统语法），本章教你用纯 Java 注解（<code class="inline">@Aspect</code>、<code class="inline">@Before</code>…）写出一模一样的效果——这也是现在 Spring 项目里 99% 的人在用的写法。</p>
+
+  <div class="covers">
+    <h4>本章你将学到</h4>
+    <ul>
+      <li>@AspectJ 注解语法与传统语法的对应关系（一张表全搞定）</li>
+      <li>用方法参数绑定连接点上下文：<code class="inline">JoinPoint</code>、<code class="inline">ProceedingJoinPoint</code>、<code class="inline">args()</code>/<code class="inline">target()</code></li>
+      <li>@AspectJ 语法做不到的事情：类型间声明、异常软化、特权切面</li>
+      <li>什么时候该用 @AspectJ，什么时候必须回去用传统语法</li>
+    </ul>
+  </div>
+
+  <h2>1. 为什么会有第二套语法？</h2>
+  <p>
+    传统语法（<code class="inline">aspect</code>、<code class="inline">pointcut</code>、<code class="inline">before()</code> 这些关键字）需要专门的 <code class="inline">ajc</code> 编译器才能理解，
+    普通的 <code class="inline">javac</code> 和大多数 IDE 完全看不懂。这就像你写了一份合同，用的是只有律师事务所内部人员才认识的黑话——法律上没问题，但换个部门看就抓瞎。
+  </p>
+  <p>
+    @AspectJ 语法的思路很简单：找一个语义相近的 Java 元素，贴上一个注解，让它“客串”AOP 概念。
+    因为切面很像一个类，所以<b>一个被 <code class="inline">@Aspect</code> 标注的类就是切面</b>；
+    因为切点可以有参数，所以<b>一个被 <code class="inline">@Pointcut</code> 标注的方法就是切点</b>。
+    这样写出来的代码，任何 Java 编译器、任何 IDE、任何静态检查工具都能正常处理——它们只是不理解注解背后的“魔法”而已，但不会报错。
+  </p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 640 260" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow-ch07-1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <text x="160" y="24" text-anchor="middle" font-size="13" font-weight="700">传统语法（.aj）</text>
+      <rect class="oldbox" x="30" y="36" width="260" height="150" rx="10"/>
+      <text x="50" y="60" font-size="12" font-family="monospace">public aspect Tracing {</text>
+      <text x="60" y="82" font-size="12" font-family="monospace">pointcut traced():</text>
+      <text x="80" y="100" font-size="12" font-family="monospace">execution(* *.*(..));</text>
+      <text x="60" y="126" font-size="12" font-family="monospace">before(): traced() {</text>
+      <text x="80" y="144" font-size="12" font-family="monospace">// log</text>
+      <text x="60" y="162" font-size="12" font-family="monospace">}</text>
+      <text x="50" y="178" font-size="12" font-family="monospace">}</text>
+
+      <text x="480" y="24" text-anchor="middle" font-size="13" font-weight="700">@AspectJ 语法（.java）</text>
+      <rect class="newbox" x="350" y="36" width="260" height="170" rx="10"/>
+      <text x="368" y="58" font-size="12" font-family="monospace">@Aspect</text>
+      <text x="368" y="76" font-size="12" font-family="monospace">class Tracing {</text>
+      <text x="384" y="94" font-size="12" font-family="monospace">@Pointcut("execution(* *.*(..))")</text>
+      <text x="384" y="112" font-size="12" font-family="monospace">void traced() {}</text>
+      <text x="384" y="136" font-size="12" font-family="monospace">@Before("traced()")</text>
+      <text x="384" y="154" font-size="12" font-family="monospace">void log(JoinPoint jp) {...}</text>
+      <text x="368" y="180" font-size="12" font-family="monospace">}</text>
+
+      <path class="arrow" d="M292,110 L346,110" marker-end="url(#arrow-ch07-1)"/>
+      <text x="319" y="100" text-anchor="middle" class="dim" font-size="11">≈ 等价</text>
+      <text x="320" y="235" text-anchor="middle" class="dim" font-size="12">两者编译后产生完全相同的字节码，只是给编译器“看”的门面不同</text>
+    </svg>
+    <div class="caption">图 7-1　同一个 Tracing 切面，传统语法 vs. @AspectJ 语法</div>
+  </div>
+
+  <h3>映射关系速查表</h3>
+  <table class="tbl">
+    <tr><th>AOP 概念</th><th>传统语法</th><th>@AspectJ 语法</th></tr>
+    <tr><td>切面</td><td><code class="inline">aspect</code> 关键字</td><td>类 + <code class="inline">@Aspect</code></td></tr>
+    <tr><td>切点</td><td><code class="inline">pointcut</code> 关键字</td><td>方法 + <code class="inline">@Pointcut</code></td></tr>
+    <tr><td>通知</td><td><code class="inline">before()</code>/<code class="inline">after()</code>/<code class="inline">around()</code></td><td>方法 + <code class="inline">@Before</code>/<code class="inline">@After...</code>/<code class="inline">@Around</code></td></tr>
+    <tr><td>引入父类型</td><td><code class="inline">declare parents</code></td><td>字段 + <code class="inline">@DeclareMixin</code></td></tr>
+    <tr><td>编译期报错/警告</td><td><code class="inline">declare error/warning</code></td><td>字段 + <code class="inline">@DeclareError</code>/<code class="inline">@DeclareWarning</code></td></tr>
+    <tr><td>类型间声明（加字段/方法）</td><td>支持</td><td><b>不支持</b></td></tr>
+    <tr><td>异常软化</td><td>支持</td><td><b>不支持</b></td></tr>
+    <tr><td>特权切面</td><td>支持</td><td><b>不支持</b></td></tr>
+  </table>
+
+  <div class="callout tip">
+    <span class="label">💡 类比</span>
+    <p>
+      @AspectJ 语法就像“伪装成普通信件的合同”——内容和正式合同（传统语法）法律效力相同，
+      但因为格式看起来像普通信件，任何邮局（Java 工具链）都愿意处理它，不会因为“格式陌生”而拒收。
+    </p>
+  </div>
+
+  <h2>2. 命名切点 vs. 匿名切点</h2>
+  <p>
+    仓库里 <code class="inline">ch07/workspace/Section7.4.1AdvisingWithAnonymousPointcut</code> 展示了最简单的写法：直接把切点表达式塞进
+    <code class="inline">@Before</code> 注解，不单独命名。这适合非常简单、只用一次的场景：
+  </p>
+
+  <div class="code">
+    <div class="file">ajia/monitoring/SystemHealthMonitor.java（匿名切点）</div>
+    <pre><code><span class="tok-ann">@Aspect</span>
+<span class="tok-kw">public class</span> SystemHealthMonitor {
+    HeartBeatListener heartBeatListener = <span class="tok-kw">new</span> HeartBeatListener();
+
+    <span class="tok-ann">@Before</span>(<span class="tok-str">"execution(* *(..)) &amp;&amp; !within(ajia.monitoring.*)"</span>)
+    <span class="tok-kw">public void</span> beatHeart() {
+        heartBeatListener.beat();
+    }
+}</code></pre>
+  </div>
+
+  <p>
+    仓库里 <code class="inline">Section7.4.1UtilizingReflectiveJoinPointContext</code> 则把切点单独命名（<code class="inline">traced()</code>），
+    这样它可以被多个通知复用，也更容易读：
+  </p>
+
+  <div class="code">
+    <div class="file">ajia/tracing/Tracing.java（命名切点 + 反射式上下文）</div>
+    <pre><code><span class="tok-ann">@Aspect</span>
+<span class="tok-kw">public class</span> Tracing {
+    <span class="tok-ann">@Pointcut</span>(<span class="tok-str">"execution(* *.*(..))"</span>)
+    <span class="tok-kw">public void</span> traced() {}
+
+    <span class="tok-ann">@Before</span>(<span class="tok-str">"traced()"</span>)
+    <span class="tok-kw">public void</span> trace(JoinPoint jp) {
+        System.out.println(<span class="tok-str">"Entering "</span> + jp);
+    }
+}</code></pre>
+  </div>
+  <p>
+    这里 <code class="inline">JoinPoint jp</code> 就是“反射式”获取上下文——不管当前拦到的是哪个方法，AspectJ 都会在运行时把一个描述
+    “这是谁、参数是什么”的对象塞给你，有点像 Java 反射里的 <code class="inline">Method</code> 对象，但专门为切面场景设计。
+  </p>
+
+  <h2>3. 更精确的上下文绑定：把参数“穿”进通知里</h2>
+  <p>
+    反射式访问简单但不够快、也没有编译期类型检查。更好的做法是用 <code class="inline">args()</code>、<code class="inline">target()</code>、<code class="inline">this()</code>
+    把连接点里的具体对象，直接绑定成通知方法的参数——类型明确，IDE 还能自动补全。
+  </p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 640 210" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow-ch07-2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <rect class="accentbox" x="20" y="30" width="600" height="46" rx="8"/>
+      <text x="40" y="58" font-size="12.5" font-family="monospace">@Pointcut("call(* Connection.*(..)) &amp;&amp; target(</text>
+      <text x="330" y="58" font-size="12.5" font-family="monospace" font-weight="700" fill="var(--accent-text)">connection</text>
+      <text x="410" y="58" font-size="12.5" font-family="monospace">)")</text>
+
+      <path class="arrow-accent" d="M370,76 C370,110 90,110 90,124" marker-end="url(#arrow-ch07-2)"/>
+
+      <rect class="box" x="20" y="128" width="600" height="46" rx="8"/>
+      <text x="40" y="156" font-size="12.5" font-family="monospace">void connectionOperation(Connection </text>
+      <text x="300" y="156" font-size="12.5" font-family="monospace" font-weight="700" fill="var(--accent-text)">connection</text>
+      <text x="380" y="156" font-size="12.5" font-family="monospace">) {}</text>
+
+      <text x="320" y="196" text-anchor="middle" class="dim" font-size="12">切点里 target(connection) 捕获到的对象，直接变成方法参数——名字必须一致</text>
+    </svg>
+    <div class="caption">图 7-2　命名切点如何把上下文绑定成强类型参数</div>
+  </div>
+
+  <div class="code">
+    <div class="file">ajia/monitoring/ConnectionMonitor.java（命名切点 + 类型化上下文）</div>
+    <pre><code><span class="tok-ann">@Aspect</span>
+<span class="tok-kw">public class</span> ConnectionMonitor {
+
+    <span class="tok-ann">@Pointcut</span>(<span class="tok-str">"call(* java.sql.Connection.*(..)) &amp;&amp; target(connection)"</span>)
+    <span class="tok-kw">public void</span> connectionOperation(Connection connection) {}
+
+    <span class="tok-ann">@Before</span>(<span class="tok-str">"connectionOperation(connection)"</span>)
+    <span class="tok-kw">public void</span> monitorUse(Connection connection) {
+        System.out.println(<span class="tok-str">"About to use "</span> + connection);
+    }
+}</code></pre>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">⚠️ 老 Java 版本的坑</span>
+    <p>
+      书中提醒：用 <code class="inline">javac</code> 编译 @AspectJ 切面时，必须加 <code class="inline">-parameters</code>（书里写的是老版本的 <code class="inline">-g:vars</code>）
+      或在注解里写 <code class="inline">argNames</code>，否则编译器不会保留参数名，织入器就没法把切点里的
+      <code class="inline">connection</code> 和方法参数名对上号。<b>现代 Maven/Gradle 编译插件建议直接开启 <code class="inline">-parameters</code> 编译选项</b>，一劳永逸。
+    </p>
+  </div>
+
+  <h2>4. Around 通知与 ProceedingJoinPoint</h2>
+  <p>
+    传统语法里 <code class="inline">proceed()</code> 是关键字；@AspectJ 里没有关键字，改用一个特殊类型的参数
+    <code class="inline">ProceedingJoinPoint</code>（继承自 <code class="inline">JoinPoint</code>），调它的 <code class="inline">proceed()</code> 方法。
+    仓库里 <code class="inline">ch07/workspace/Section7.4.3ProceedingWithOriginalJoinPointExecution</code> 就是经典的性能计时切面：
+  </p>
+
+  <div class="code">
+    <div class="file">ajia/monitoring/Monitoring.java（计时 around 通知）</div>
+    <pre><code><span class="tok-ann">@Aspect</span>
+<span class="tok-kw">public abstract class</span> Monitoring {
+
+    <span class="tok-ann">@Pointcut</span>
+    <span class="tok-kw">public abstract void</span> monitored();
+
+    <span class="tok-ann">@Around</span>(<span class="tok-str">"monitored()"</span>)
+    <span class="tok-kw">public</span> Object measureTime(ProceedingJoinPoint pjp) <span class="tok-kw">throws</span> Throwable {
+        <span class="tok-kw">long</span> start = System.nanoTime();
+        Object ret = pjp.proceed();               <span class="tok-cm">// 相当于传统语法里的 proceed()</span>
+        <span class="tok-kw">long</span> end = System.nanoTime();
+        System.out.println(pjp.getSignature().toShortString()
+                + <span class="tok-str">" took "</span> + (end - start) + <span class="tok-str">"ns"</span>);
+        <span class="tok-kw">return</span> ret;
+    }
+}</code></pre>
+  </div>
+  <p>
+    注意这里 <code class="inline">monitored()</code> 是一个<b>抽象切点</b>——这个类本身没定义“监控谁”，
+    留给子类去实现（比如“只监控 JDBC 调用”）。这是切面版的模板方法模式，第 6、12 章会再深入讲。
+  </p>
+
+  <h2>5. @AspectJ 语法做不到的三件事</h2>
+  <p>因为整套设计必须兼容普通 <code class="inline">javac</code>，有些强行改变“类的结构 / 编译期规则”的功能没法实现：</p>
+  <ul>
+    <li><b>类型间声明（ITD）</b>——不能用 @AspectJ 给已有类新增字段/方法（下一章 ch05 讲的功能）。普通 Java 编译器根本不知道“这个字段是切面偷偷加的”，所以干脆不支持；退而求其次可以用 <code class="inline">@DeclareMixin</code> 实现“混入接口”的效果。</li>
+    <li><b>异常软化（declare soft）</b>——把受检异常在编译期变成非受检异常，这依赖专用编译器修改编译期检查规则，javac 做不到。运行时部分（抛出 <code class="inline">SoftException</code>）可以用 <code class="inline">@AfterThrowing</code> 模拟，但调用方仍然被强制 <code class="inline">catch</code>，价值大打折扣。</li>
+    <li><b>特权切面（privileged aspect）</b>——绕过 Java 访问控制规则，javac 不认。需要类似效果时改用反射 + <code class="inline">setAccessible(true)</code>。</li>
+  </ul>
+
+  <div class="callout modern">
+    <span class="label">🔧 现代化写法</span>
+    <p>
+      本章例子在仓库里用的是 AspectJ 1.6 + 老版 <code class="inline">org.codehaus.mojo:aspectj-maven-plugin</code>（<code class="inline">source/target 1.5</code>）。
+      现在写同样的代码，<code class="inline">pom.xml</code> 建议这样配置：
+    </p>
+  </div>
+
+  <div class="code">
+    <div class="file">pom.xml（现代等价写法）</div>
+    <pre><code>&lt;properties&gt;
+    &lt;maven.compiler.release&gt;17&lt;/maven.compiler.release&gt;
+    &lt;aspectj.version&gt;1.9.22&lt;/aspectj.version&gt;
+&lt;/properties&gt;
+
+&lt;dependencies&gt;
+    &lt;dependency&gt;
+        &lt;groupId&gt;org.aspectj&lt;/groupId&gt;
+        &lt;artifactId&gt;aspectjrt&lt;/artifactId&gt;
+        &lt;version&gt;${aspectj.version}&lt;/version&gt;
+    &lt;/dependency&gt;
+&lt;/dependencies&gt;
+
+&lt;build&gt;
+  &lt;plugins&gt;
+    &lt;plugin&gt;
+        &lt;groupId&gt;dev.aspectj&lt;/groupId&gt;                 &lt;!-- 社区维护的现代分支 --&gt;
+        &lt;artifactId&gt;aspectj-maven-plugin&lt;/artifactId&gt;
+        &lt;version&gt;1.14&lt;/version&gt;
+        &lt;configuration&gt;
+            &lt;complianceLevel&gt;17&lt;/complianceLevel&gt;
+            &lt;source&gt;17&lt;/source&gt;
+            &lt;target&gt;17&lt;/target&gt;
+            &lt;showWeaveInfo&gt;true&lt;/showWeaveInfo&gt;
+            &lt;parameters&gt;true&lt;/parameters&gt;             &lt;!-- 取代老式 -g:vars --&gt;
+        &lt;/configuration&gt;
+        &lt;executions&gt;
+            &lt;execution&gt;
+                &lt;goals&gt;&lt;goal&gt;compile&lt;/goal&gt;&lt;goal&gt;test-compile&lt;/goal&gt;&lt;/goals&gt;
+            &lt;/execution&gt;
+        &lt;/executions&gt;
+    &lt;/plugin&gt;
+  &lt;/plugins&gt;
+&lt;/build&gt;</code></pre>
+  </div>
+  <div class="callout warn">
+    <span class="label">⚠️ 版本提醒</span>
+    <p><code class="inline">org.codehaus.mojo:aspectj-maven-plugin</code> 已多年未更新且不支持新版 Java；社区分支 <code class="inline">dev.aspectj:aspectj-maven-plugin</code> 才是目前活跃维护、支持 Java 17/21 的选择。使用前请到 Maven Central 确认最新版本号。</p>
+  </div>
+
+  <h2>6. 该选 @AspectJ 还是传统语法？</h2>
+  <div class="versus">
+    <div class="col old">
+      <div class="tag">传统语法（.aj）</div>
+      <ul>
+        <li>写法最紧凑，功能最全（ITD、异常软化都支持）</li>
+        <li>必须用 ajc / AJDT 编译，普通 IDE、静态分析工具不认识</li>
+        <li>适合：团队用 Eclipse + AJDT，且要重度使用 ITD 等高级特性</li>
+      </ul>
+    </div>
+    <div class="col new">
+      <div class="tag">@AspectJ 语法（推荐默认选项）</div>
+      <ul>
+        <li>纯 Java 注解，javac / IntelliJ IDEA / 静态分析工具全部兼容</li>
+        <li>Spring AOP 只支持这种语法（不需要专门编译器，用代理实现）</li>
+        <li>适合：几乎所有现代 Spring / Spring Boot 项目</li>
+      </ul>
+    </div>
+  </div>
+  <p>
+    结论：<b>如果你在写 Spring 应用，直接用 @AspectJ 语法</b>，第 9 章会看到 Spring AOP 怎么在不需要任何特殊编译器的情况下，
+    仅凭 @AspectJ 注解就能给 Bean 生成代理。只有当你真的需要 ITD、异常软化这类“结构级”能力时，才需要请出传统语法。
+  </p>
+
+  <div class="exercise">
+    <span class="label">✏️ 动手练习</span>
+    <p>
+      打开仓库 <code class="inline">ch07/workspace/Section7.4.2CollectingReturnValueAndThrownException</code>，
+      找到用 <code class="inline">@AfterReturning(returning="ret")</code> 和 <code class="inline">@AfterThrowing(throwing="ex")</code> 的写法，
+      试着把 <code class="inline">returning</code> 参数类型从 <code class="inline">Object</code> 改成一个更具体的类型，观察通知的触发范围如何变化。
+    </p>
+  </div>
+
+  <h2>小结 &amp; 自测</h2>
+  <ul class="quiz">
+    <li class="q">@AspectJ 语法里，一个类要变成切面，需要做什么？
+      <div class="a">给类加上 <code class="inline">@Aspect</code> 注解即可；它本质上还是一个普通 Java 类，只是编译期/织入期的行为会被特殊处理。</div>
+    </li>
+    <li class="q">为什么 @AspectJ 语法里 <code class="inline">if()</code> 切点要专门处理，不能直接把条件表达式写在字符串里？
+      <div class="a">因为切点表达式是字符串，javac 不会检查字符串内部的拼写/语法错误；把条件逻辑放进一个真正的 Java 方法体里，才能让 javac 帮你在编译期发现错误。</div>
+    </li>
+    <li class="q">around 通知里，@AspectJ 语法用什么代替传统语法的 <code class="inline">proceed()</code> 关键字？
+      <div class="a">声明一个 <code class="inline">ProceedingJoinPoint</code> 类型的方法参数，调用它的 <code class="inline">proceed()</code>（或 <code class="inline">proceed(Object[])</code>）方法。</div>
+    </li>
+    <li class="q">下面三个功能里，哪个可以用 @AspectJ 语法实现：① 给已有类新增字段 ② 声明编译期警告 ③ 特权访问私有字段？
+      <div class="a">只有 ②——用 <code class="inline">@DeclareWarning</code> 标注一个 <code class="inline">static final String</code> 字段。①③ 都需要传统语法。</div>
+    </li>
+    <li class="q">为什么 @AspectJ 切点表达式里的类型名必须写全限定名（比如 <code class="inline">java.sql.Connection</code> 而不是 <code class="inline">Connection</code>）？
+      <div class="a">因为 import 语句只是源码层面的写法糖，编译成字节码后不会保留；切点表达式是注解里的字符串，织入器读到的是编译后的字节码，没有 import 信息可用。</div>
+    </li>
+  </ul>
+
+  <div class="pagenav">
+    <a class="prev" href="ch06.html"><span class="lbl">上一章</span>第 6 章：把切面拼在一起</a>
+    <a class="next" href="ch08.html"><span class="lbl">下一章</span>第 8 章：AspectJ 的织入方式</a>
+  </div>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

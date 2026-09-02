@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第 5 章：用静态切面修改结构 | AspectJ in Action 图解笔记</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar">
+  <a href="index.html">&larr; 全部章节</a>
+  <span>AspectJ in Action · 图解笔记</span>
+</div>
+<div class="page">
+
+  <span class="kicker">CHAPTER 05</span>
+  <h1>用静态切面修改结构</h1>
+  <p class="subtitle">一句话概括本章：前几章用切面“插入行为”，这一章教你用切面“改造结构”——给已有的类偷偷加字段、加方法，甚至让它多实现一个接口。</p>
+
+  <div class="covers">
+    <h4>本章你将学到</h4>
+    <ul>
+      <li>类型间声明（Inter-type Declaration，ITD）：从切面里给别的类加字段/方法/构造器</li>
+      <li>用 <code class="inline">declare parents</code> 给已有类“贴上”新接口或新父类，实现 Java 没有的“混入（mixin）”</li>
+      <li>用 <code class="inline">declare error</code> / <code class="inline">declare warning</code> 在编译期就拦住违规代码</li>
+      <li>用 <code class="inline">declare soft</code> 把烦人的受检异常变成非受检异常</li>
+    </ul>
+  </div>
+
+  <h2>1. 为什么需要“静态”切面</h2>
+  <p>
+    第 4 章的通知（advice）改的是<strong>行为</strong>：在方法执行前后插一段代码。但有些问题光靠“插代码”解决不了——
+    比如你想让若干个毫不相关的类都拥有“属性变更通知”能力，或者想给第三方库里的一个类加一个字段，而你根本改不了它的源码。
+    这类需求改的是类的<strong>结构</strong>（有哪些字段、实现了哪些接口），AspectJ 把这种切面叫做<strong>静态切分（static crosscutting）</strong>，
+    核心工具就是<strong>类型间声明（ITD）</strong>。
+  </p>
+
+  <div class="callout tip">
+    <span class="label">💡 类比</span>
+    <p>
+      普通的 Java 继承像是“出生时就定好血统”：一个类的父类和接口在写代码那一刻就固定了。
+      ITD 更像是“成年后办理的资质认证”——切面在编译期悄悄给某个类补办一张“新技能证书”（新字段/新方法/新接口），
+      业务类自己完全不知道这件事发生过。
+    </p>
+  </div>
+
+  <h2>2. 类型间声明（ITD）：给别的类加东西</h2>
+  <p>
+    ITD 的语法很好认：正常写字段/方法时，把类名塞进方法名（或字段名）前面，就表示“这个成员属于那个类，不属于我自己”。
+    书中经典例子是给 Java Bean 补上“属性变更通知”功能——用一个空接口 <code class="inline">BeanSupport</code> 做标记，
+    真正的实现全部由切面通过 ITD 注入：
+  </p>
+
+  <div class="code">
+    <div class="file">ch05/workspace/Section5.1.3MixingWithMixins — BeanSupport.java（标记接口，本身空空如也）</div>
+    <pre><code><span class="tok-kw">package</span> ajia.bean;
+
+<span class="tok-kw">public interface</span> BeanSupport {
+}</code></pre>
+  </div>
+
+  <div class="code">
+    <div class="file">ch05/workspace/Section5.1.3MixingWithMixins — BeanMakerAspect.aj（真正干活的切面）</div>
+    <pre><code><span class="tok-kw">public aspect</span> BeanMakerAspect {
+    <span class="tok-cm">// 给所有 BeanSupport 实现类"塞"一个新字段</span>
+    <span class="tok-kw">private</span> PropertyChangeSupport BeanSupport.propertyChangeSupport;
+
+    <span class="tok-cm">// 给所有 BeanSupport 实现类"塞"两个新方法</span>
+    <span class="tok-kw">public void</span> BeanSupport.addPropertyChangeListener(PropertyChangeListener l) {
+        propertyChangeSupport.addPropertyChangeListener(l);
+    }
+    <span class="tok-kw">public void</span> BeanSupport.removePropertyChangeListener(PropertyChangeListener l) {
+        propertyChangeSupport.removePropertyChangeListener(l);
+    }
+
+    <span class="tok-kw">pointcut</span> beanCreation(BeanSupport bean)
+        : initialization(BeanSupport+.new(..)) && this(bean);
+
+    <span class="tok-kw">after</span>(BeanSupport bean) returning : beanCreation(bean) {
+        bean.propertyChangeSupport = <span class="tok-kw">new</span> PropertyChangeSupport(bean);
+    }
+    <span class="tok-cm">// around 通知拦截所有 setter，比较新旧值后触发通知（略，见仓库源码）</span>
+}</code></pre>
+  </div>
+
+  <p>
+    效果：<code class="inline">Customer</code> 类只写了 <code class="inline">implements BeanSupport</code> 这一行，
+    编译后却"自带" <code class="inline">addPropertyChangeListener</code>、自动在每个 setter 后发出属性变更事件——
+    这些代码 <strong>Customer.java 里一行都没写</strong>，全部来自切面。
+  </p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 640 260" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow-ch05-1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="currentColor" />
+        </marker>
+      </defs>
+      <rect class="box" x="30" y="70" width="220" height="120" rx="10"/>
+      <text x="140" y="95" text-anchor="middle" font-weight="700">class Customer</text>
+      <text x="140" y="120" text-anchor="middle" font-size="12">implements BeanSupport</text>
+      <text x="140" y="145" text-anchor="middle" font-size="12" class="dim">- address: String</text>
+      <text x="140" y="165" text-anchor="middle" font-size="12" class="dim">getAddress() / setAddress()</text>
+
+      <path class="arrow" d="M255,130 L385,130" style="color:var(--text-dim)" marker-end="url(#arrow-ch05-1)"/>
+      <text x="320" y="118" text-anchor="middle" class="dim" font-size="12">编译期 ITD 织入</text>
+
+      <rect class="accentbox" x="390" y="50" width="230" height="160" rx="10" stroke-dasharray="6 4"/>
+      <text x="505" y="72" text-anchor="middle" font-weight="700">编译后的 Customer</text>
+      <text x="505" y="96" text-anchor="middle" font-size="12" class="dim">- address: String</text>
+      <text x="505" y="116" text-anchor="middle" font-size="12">+ propertyChangeSupport ⟵来自切面</text>
+      <text x="505" y="136" text-anchor="middle" font-size="12">+ addPropertyChangeListener() ⟵来自切面</text>
+      <text x="505" y="156" text-anchor="middle" font-size="12">+ removePropertyChangeListener() ⟵来自切面</text>
+      <text x="505" y="176" text-anchor="middle" font-size="12" class="dim">getAddress() / setAddress()</text>
+      <text x="505" y="196" text-anchor="middle" font-size="11" class="dim">（setter 被 around 通知包了一层）</text>
+    </svg>
+    <div class="caption">图 5-1　左边是你写的 Customer；右边是编译后真正跑起来的 Customer——多出来的部分（虚线框）都来自 BeanMakerAspect 的 ITD</div>
+  </div>
+
+  <h2>3. declare parents：给类“贴”新接口/新父类（mixin）</h2>
+  <p>
+    ITD 常和 <code class="inline">declare parents</code> 搭配使用：先用它让一批类"承认"自己实现了某个接口，
+    再用 ITD 给这个接口补上默认实现——这就是 AspectJ 版的 <strong>mixin（混入）</strong>，
+    相当于给 Java 补上了它一直没有的"多重实现继承"。
+  </p>
+  <div class="code">
+    <div class="file">语法（并非某个具体示例文件，用来说明用法）</div>
+    <pre><code><span class="tok-kw">declare parents</span>: banking.entities.* <span class="tok-kw">implements</span> BeanSupport;
+<span class="tok-cm">// 也可以按注解匹配，比如让所有 @Entity 类自动获得 BeanSupport 能力</span>
+<span class="tok-kw">declare parents</span>: @Entity * <span class="tok-kw">implements</span> BeanSupport;</code></pre>
+  </div>
+
+  <div class="diagram">
+    <svg viewBox="0 0 640 300" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow-ch05-2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="currentColor" />
+        </marker>
+      </defs>
+      <rect class="box" x="40" y="20" width="160" height="50" rx="8"/>
+      <text x="120" y="50" text-anchor="middle" font-size="13">接口 A（如 Comparable）</text>
+      <rect class="box" x="440" y="20" width="160" height="50" rx="8"/>
+      <text x="520" y="50" text-anchor="middle" font-size="13">接口 B（如 Auditable）</text>
+
+      <rect class="accentbox" x="40" y="110" width="160" height="50" rx="8"/>
+      <text x="120" y="140" text-anchor="middle" font-size="13">切面：A 的默认实现</text>
+      <rect class="accentbox" x="440" y="110" width="160" height="50" rx="8"/>
+      <text x="520" y="140" text-anchor="middle" font-size="13">切面：B 的默认实现</text>
+
+      <rect class="box" x="220" y="220" width="200" height="60" rx="10"/>
+      <text x="320" y="245" text-anchor="middle" font-weight="700">目标类 Order</text>
+      <text x="320" y="264" text-anchor="middle" font-size="11" class="dim">declare parents 让它实现 A、B</text>
+
+      <path class="arrow" d="M120,70 L120,105" marker-end="url(#arrow-ch05-2)"/>
+      <path class="arrow" d="M520,70 L520,105" marker-end="url(#arrow-ch05-2)"/>
+      <path class="arrow" d="M150,160 L280,225" marker-end="url(#arrow-ch05-2)"/>
+      <path class="arrow" d="M490,160 L360,225" marker-end="url(#arrow-ch05-2)"/>
+    </svg>
+    <div class="caption">图 5-2　mixin：两个互不相关的接口，各自的默认实现由不同切面通过 ITD 提供，最终“混入”同一个目标类</div>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">⚠️ 现代 Java 上的注意事项</span>
+    <p>
+      AspectJ 1.9.x 在 Java 17/21 上依旧完整支持 ITD 与 <code class="inline">declare parents</code>，语法几乎和书里一模一样。
+      但要注意两点：① Java 8 之后接口本身也能写 <code class="inline">default</code> 方法，很多当年只能靠 mixin 实现的“默认实现”需求，
+      现在用接口默认方法就能直接解决，不必上 AspectJ；② 如果目标类位于 JDK 内部模块（<code class="inline">java.*</code>），
+      模块系统（JPMS）会限制反射与织入访问，实践中请只对你自己的业务类做 ITD。
+    </p>
+  </div>
+
+  <h2>4. declare @type：给类型贴注解</h2>
+  <p>
+    和 ITD 类似，你也可以让切面在编译期给某个类型“贴上”一个注解，常用来给一批符合某种特征的类统一打标签，
+    以便其他切点用 <code class="inline">@within</code>、<code class="inline">@target</code> 之类的注解匹配去命中它们。
+  </p>
+  <div class="code">
+    <div class="file">语法示例</div>
+    <pre><code><span class="tok-kw">declare @type</span>: @PrivacyControlled * : @Tracked;
+<span class="tok-cm">// 意思：所有标了 @PrivacyControlled 的类，编译期自动再打上 @Tracked</span></code></pre>
+  </div>
+
+  <h2>5. declare error / declare warning：把规范检查提前到编译期</h2>
+  <p>
+    这是本章里“性价比”很高的一招：用切点描述一种你不想看到的写法，一旦有代码命中，编译直接报错或警告，
+    而不是等到 code review 或线上事故才发现。第 11 章会把这个技巧发扬光大，用来做团队级的架构规范检查。
+  </p>
+  <div class="code">
+    <div class="file">语法示例</div>
+    <pre><code><span class="tok-kw">declare error</span> : call(* Runtime.exec(..)) : <span class="tok-str">"禁止直接调用 Runtime.exec，请走审计过的 ProcessRunner"</span>;
+<span class="tok-kw">declare warning</span> : call(* java.io.*.*(..)) && within(com.acme.service..*) : <span class="tok-str">"service 层不要直接做文件 IO"</span>;</code></pre>
+  </div>
+
+  <h2>6. declare soft：把受检异常“软化”成非受检异常</h2>
+  <p>
+    Java 的受检异常（checked exception）经常逼着你在完全无法处理异常的地方写一堆 <code class="inline">try/catch</code> 或
+    <code class="inline">throws</code> 样板代码。<code class="inline">declare soft</code> 可以指定：在某个切点范围内，
+    某种受检异常自动被包装成 AspectJ 提供的 <code class="inline">org.aspectj.lang.SoftException</code>（一个运行时异常），
+    调用方就不必强制处理它了。
+  </p>
+  <div class="code">
+    <div class="file">ch05/workspace/Section5.6SofteningCheckedException</div>
+    <pre><code><span class="tok-kw">public aspect</span> SofteningTestAspect {
+    <span class="tok-kw">declare soft</span> : RemoteException : call(<span class="tok-kw">void</span> TestSoftening.perform());
+}
+
+<span class="tok-cm">// TestSoftening.perform() 原本声明 throws RemoteException，
+// 但在这个切点范围内调用它时，异常被自动“软化”，调用处不必写 try/catch</span></code></pre>
+  </div>
+
+  <div class="callout modern">
+    <span class="label">🔧 现代写法提示</span>
+    <p>
+      ITD、<code class="inline">declare parents</code>、<code class="inline">declare error/warning/soft</code> 都是
+      AspectJ <strong>原生语法（native syntax，.aj 文件）</strong>独有的能力——纯注解风格的 @AspectJ 语法（第 7 章会讲）
+      不支持静态切分。所以如果你的项目主要用注解写切面，但又想用本章这些能力，需要保留 <code class="inline">.aj</code> 文件，
+      并在 <code class="inline">pom.xml</code> 里用现代维护版的编译插件 <code class="inline">dev.aspectj:aspectj-maven-plugin</code>
+      （取代已停止维护的 <code class="inline">org.codehaus.mojo:aspectj-maven-plugin</code>）来编译，具体配置见附录 B/C 笔记。
+    </p>
+  </div>
+
+  <div class="exercise">
+    <span class="label">✏️ 动手练习</span>
+    <p>
+      打开仓库 <code class="inline">ch05/workspace/Section5.1.3MixingWithMixins</code>，运行其中的
+      <code class="inline">CustomerBeanTest</code>，观察它如何在没有修改 <code class="inline">Customer.java</code>
+      的前提下监听到属性变化；然后尝试自己写一个 <code class="inline">Auditable</code> 接口 + 对应切面，
+      用 <code class="inline">declare parents</code> 把它“混入”到 <code class="inline">Order</code> 类上，
+      并用 ITD 加一个 <code class="inline">lastModifiedBy</code> 字段。
+    </p>
+  </div>
+
+  <h2>小结 &amp; 自测</h2>
+  <ul class="quiz">
+    <li class="q">ITD 和普通通知（advice）的本质区别是什么？
+      <div class="a">通知修改的是“行为”（在某个连接点前后插入代码），而 ITD 修改的是“结构”——给已有类型静态地添加字段、方法、构造器，编译后这些成员就像原本就写在那个类里一样。</div>
+    </li>
+    <li class="q">declare parents 能让一个类同时“继承”两个类的实现吗？
+      <div class="a">不能直接继承两个类（Java 单继承限制仍在），但可以让类实现多个接口，再分别用不同切面通过 ITD 给每个接口提供实现，从而达到“多重实现继承”的效果，这就是 mixin。</div>
+    </li>
+    <li class="q">declare error 和普通的单元测试相比，优势是什么？
+      <div class="a">declare error 在编译期就拦截违规代码，写代码的人几乎无法忽略；而单元测试要跑起来才发现问题，且需要专门为规范检查写测试用例，覆盖不全时规范就形同虚设。</div>
+    </li>
+    <li class="q">declare soft 软化之后的异常还需要 catch 吗？
+      <div class="a">不强制。软化后的异常是运行时异常（SoftException），Java 编译器不会强制你处理它；如果你确实想处理，仍然可以 catch org.aspectj.lang.SoftException 并调用 getWrappedThrowable() 拿到原始异常。</div>
+    </li>
+  </ul>
+
+  <div class="pagenav">
+    <a class="prev" href="ch04.html"><span class="lbl">上一章</span>第 4 章：用动态切面修改行为</a>
+    <a class="next" href="ch06.html"><span class="lbl">下一章</span>第 6 章：把切面拼在一起</a>
+  </div>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

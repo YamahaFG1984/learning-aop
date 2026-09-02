@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第 12 章：切面设计模式 | AspectJ in Action 图解笔记</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar">
+  <a href="index.html">&larr; 全部章节</a>
+  <span>AspectJ in Action · 图解笔记</span>
+</div>
+<div class="page">
+
+  <span class="kicker">CHAPTER 12</span>
+  <h1>切面设计模式</h1>
+  <p class="subtitle">一句话概括本章：三种"老手才知道"的切面写法——worker object（工人对象）、wormhole（虫洞）、participant（参与者）——帮你解决普通切点/通知搞不定的问题。</p>
+
+  <div class="covers">
+    <h4>本章你将学到</h4>
+    <ul>
+      <li><b>Worker object 模式</b>：让切面把"要执行的操作"打包成一个对象，方便丢给线程池、事务管理器等别的地方去执行</li>
+      <li><b>Wormhole 模式</b>：不改任何中间方法的参数列表，把调用链最上层的上下文"直接传送"到最下层</li>
+      <li><b>Participant 模式</b>：当"方法名/类型"不足以描述某种业务特征时，让类主动"报名参与"某个切面行为</li>
+    </ul>
+  </div>
+
+  <h2>1. Worker object 模式：把一次调用"打包"成对象</h2>
+  <p>
+    设想一个需求：把某些耗时操作（缓存预取、项目备份）扔到线程池里异步执行，而不是阻塞当前调用线程。
+    如果不用切面，你得给每个耗时方法手写一个 <code class="inline">Runnable</code> 包装类，改造所有调用点——费时又容易漏改。
+  </p>
+  <p>
+    Worker object 模式的思路是：用 <code class="inline">around</code> 通知把"原本要执行的连接点"包进一个匿名 <code class="inline">Runnable</code>，
+    这个 Runnable 的 <code class="inline">run()</code> 方法里调用 <code class="inline">proceed()</code>。这样切面就把"何时执行/在哪里执行"这件事，
+    从"立刻同步执行"变成了"生成一个可以传递、可以延后执行的对象"。
+  </p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 640 240" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow-ch12-1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <rect class="box" x="20" y="30" width="170" height="56" rx="10"/>
+      <text x="105" y="63" text-anchor="middle" font-size="13">CachePreFetcher.fetch()</text>
+
+      <rect class="accentbox" x="240" y="30" width="180" height="56" rx="10"/>
+      <text x="330" y="55" text-anchor="middle" font-size="13">around 通知</text>
+      <text x="330" y="73" text-anchor="middle" font-size="11" class="dim">拦截调用</text>
+
+      <path class="arrow" d="M190,58 L235,58" marker-end="url(#arrow-ch12-1)"/>
+
+      <rect class="newbox" x="460" y="30" width="160" height="56" rx="10"/>
+      <text x="540" y="55" text-anchor="middle" font-size="13">Worker 对象</text>
+      <text x="540" y="73" text-anchor="middle" font-size="11" class="dim">run() { proceed(); }</text>
+
+      <path class="arrow-accent" d="M420,58 L455,58" marker-end="url(#arrow-ch12-1)"/>
+
+      <rect class="box" x="460" y="140" width="160" height="56" rx="10"/>
+      <text x="540" y="165" text-anchor="middle" font-size="13">线程池 / 队列</text>
+      <text x="540" y="183" text-anchor="middle" font-size="11" class="dim">executor.execute(worker)</text>
+
+      <path class="arrow" d="M540,86 L540,136" marker-end="url(#arrow-ch12-1)"/>
+      <text x="330" y="140" text-anchor="middle" font-size="12" class="dim">切面把"执行原方法"这件事，从</text>
+      <text x="330" y="158" text-anchor="middle" font-size="12" class="dim">"立刻同步跑"变成了"打包成对象，交给别人决定何时/在哪跑"</text>
+    </svg>
+    <div class="caption">图 12-1　Worker object 模式：around 通知把 proceed() 包进一个可传递的 Runnable</div>
+  </div>
+
+  <div class="code">
+    <div class="file">ch12/workspace/Section12.1.3TheWorkerObjectPatternTemplate（现代 @AspectJ 写法）</div>
+    <pre><code><span class="tok-ann">@Aspect</span>
+<span class="tok-kw">public class</span> AsynchronousExecutionAspect {
+    <span class="tok-kw">private final</span> Executor executor = Executors.newVirtualThreadPerTaskExecutor(); <span class="tok-cm">// Java 21 虚拟线程</span>
+
+    <span class="tok-ann">@Pointcut</span>(<span class="tok-str">"execution(* ajia.example.CachePreFetcher.fetch()) || "</span>
+              + <span class="tok-str">"execution(* ajia.example.ProjectSaver.backupSave())"</span>)
+    <span class="tok-kw">public void</span> asyncOperation() {}
+
+    <span class="tok-ann">@Around</span>(<span class="tok-str">"asyncOperation()"</span>)
+    <span class="tok-kw">public void</span> routeAsync(ProceedingJoinPoint pjp) {
+        Runnable worker = () -> {
+            <span class="tok-kw">try</span> { pjp.proceed(); }
+            <span class="tok-kw">catch</span> (Throwable t) { <span class="tok-kw">throw new</span> RuntimeException(t); }
+        };
+        executor.execute(worker);
+    }
+}</code></pre>
+  </div>
+
+  <div class="callout tip">
+    <span class="label">💡 为什么不直接用组合/嵌套类实现，而要靠 ITD？</span>
+    <p>
+      本章其它例子里，worker 对象常常是切面通过类型间声明（ITD，见第 5 章）引入到目标类里的一个协作对象，
+      而不是每次都在方法体里 new 一个匿名类。这样切面既能"生产"一个干净的领域对象供 worker 使用，
+      又不会把线程/回调相关的技术细节污染到业务类的源码里——业务类完全不知道自己被"安排"进了异步执行。
+    </p>
+  </div>
+
+  <p>
+    书中还展示了如何从 worker 里取到返回值：让 worker 类保存一个 <code class="inline">returnValue</code> 字段，
+    <code class="inline">run()</code> 里执行 <code class="inline">setReturnValue(proceed())</code>，
+    执行完毕后 advice 再 <code class="inline">return worker.getReturnValue()</code>——
+    对照仓库里的 <code class="inline">Section12.1.4GettingReturnValueWithoutAspects</code>（手写样板代码）和
+    <code class="inline">Section12.1.4GettingReturnValueWithAspects</code>（用切面统一处理）两个文件夹，能直观看出省了多少重复代码。
+  </p>
+
+  <div class="callout modern">
+    <span class="label">🔧 现代化提示</span>
+    <p>
+      书中用 <code class="inline">Executors.newCachedThreadPool()</code>；在 Java 21+ 上，
+      对这种"发射后不管/短生命周期"的异步任务，可以直接换成 <code class="inline">Executors.newVirtualThreadPerTaskExecutor()</code>（虚拟线程），
+      不需要担心线程池大小调优。如果需要拿到返回值并支持组合/超时，<code class="inline">CompletableFuture</code> 通常比手写 Worker + wait 更省心，
+      但理解 worker object 模式，能帮你看懂 Spring 事务管理、异步执行等框架底层是怎么用 AOP 拼出来的。
+    </p>
+  </div>
+
+  <h2>2. Wormhole 模式：跳过中间层直接传递上下文</h2>
+  <p>
+    设想一个审计需求：无论是 ATM、柜台还是网银发起的转账，最终都要落到 <code class="inline">Account.credit()</code>/<code class="inline">debit()</code>，
+    但记账时需要知道"这笔操作最初是从哪个渠道发起的"。如果不用切面，要么给 <code class="inline">Account</code> 的每个方法加一个
+    <code class="inline">TransactionSystem</code> 参数（一路传下去，污染 API），要么用 <code class="inline">ThreadLocal</code>
+    手动存取（容易忘记清理，线程池环境下还有脏数据风险）。
+  </p>
+  <p>
+    Wormhole 模式用 <code class="inline">cflow()</code> 切点，把"调用链最上层的上下文"直接和"调用链最下层的连接点"连在一起，
+    中间隔着多少层方法调用都无所谓。
+  </p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 640 260" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow-ch12-2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <rect class="box" x="10" y="40" width="110" height="46" rx="8"/>
+      <text x="65" y="68" text-anchor="middle" font-size="12">ATM (A)</text>
+      <rect class="box" x="150" y="40" width="110" height="46" rx="8"/>
+      <text x="205" y="68" text-anchor="middle" font-size="12">TransferService (B)</text>
+      <rect class="box" x="290" y="40" width="110" height="46" rx="8"/>
+      <text x="345" y="68" text-anchor="middle" font-size="12">AccountManager (C)</text>
+      <rect class="box" x="430" y="40" width="110" height="46" rx="8"/>
+      <text x="485" y="68" text-anchor="middle" font-size="12">ValidationUtil (D)</text>
+      <rect class="accentbox" x="530" y="120" width="100" height="46" rx="8"/>
+      <text x="580" y="148" text-anchor="middle" font-size="12">Account.credit()</text>
+
+      <path class="arrow" d="M120,63 L145,63" marker-end="url(#arrow-ch12-2)"/>
+      <path class="arrow" d="M260,63 L285,63" marker-end="url(#arrow-ch12-2)"/>
+      <path class="arrow" d="M400,63 L425,63" marker-end="url(#arrow-ch12-2)"/>
+      <path class="arrow" d="M540,63 L570,115" marker-end="url(#arrow-ch12-2)"/>
+      <text x="360" y="100" text-anchor="middle" font-size="11" class="dim">普通做法：想传上下文得改 B/C/D 的参数列表 (虚线)</text>
+      <path d="M120,80 C300,110 400,110 530,140" fill="none" stroke="var(--old)" stroke-width="1.5" stroke-dasharray="4,4"/>
+
+      <path d="M65,86 C65,220 580,220 578,170" fill="none" stroke="var(--accent)" stroke-width="2.4" marker-end="url(#arrow-ch12-2)"/>
+      <text x="330" y="235" text-anchor="middle" font-size="13" fill="var(--accent-text)">🕳️ 虫洞：cflow(callerSpace()) &amp;&amp; calleeSpace() 直接把 A 的上下文送到 advice</text>
+    </svg>
+    <div class="caption">图 12-2　wormhole 模式：借助 cflow()，跳过 B、C、D 三层，把最上层调用者的上下文直接带到最下层的通知里</div>
+  </div>
+
+  <div class="code">
+    <div class="file">wormhole 模式模板（现代 @AspectJ 写法）</div>
+    <pre><code><span class="tok-ann">@Aspect</span>
+<span class="tok-kw">public class</span> AccountTransactionAudit {
+
+    <span class="tok-ann">@Pointcut</span>(<span class="tok-str">"execution(* ajia.banking.TransactionSystem+.*(..)) &amp;&amp; this(ts)"</span>)
+    <span class="tok-kw">public void</span> transactionSystemUsage(TransactionSystem ts) {}
+
+    <span class="tok-ann">@Pointcut</span>(<span class="tok-str">"execution(* Account.credit(float)) &amp;&amp; this(account) &amp;&amp; args(amount)"</span>)
+    <span class="tok-kw">public void</span> accountTransaction(Account account, <span class="tok-kw">float</span> amount) {}
+
+    <span class="tok-ann">@Before</span>(<span class="tok-str">"cflow(transactionSystemUsage(ts)) &amp;&amp; accountTransaction(account, amount)"</span>)
+    <span class="tok-kw">public void</span> audit(TransactionSystem ts, Account account, <span class="tok-kw">float</span> amount) {
+        <span class="tok-cm">// 不管 A 到 credit() 之间隔了几层，这里都能拿到最初发起方 ts</span>
+        log.info(<span class="tok-str">"channel={} account={} amount={}"</span>, ts, account, amount);
+    }
+}</code></pre>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">⚠️ 只有真正的 AspectJ 织入才能用</span>
+    <p>
+      因为依赖 <code class="inline">cflow()</code>，wormhole 模式无法用 Spring AOP（代理式）实现。
+      Spring AOP 环境下想要类似效果，通常退回到 <code class="inline">ThreadLocal</code>，
+      或者用可观测性框架自带的传播机制（例如分布式追踪里的 <code class="inline">TraceContext</code>/MDC 传递，本质也是一种"虫洞"）。
+    </p>
+  </div>
+
+  <h2>3. Participant 模式：让类"报名参与"</h2>
+  <p>
+    有些横切关注点没法只靠方法名/类型模式选出来——比如"哪些操作算慢操作，需要显示等待光标"，
+    <code class="inline">Analytics.monteCarloSimulation()</code> 慢，但慢不慢跟方法名毫无关系。
+    如果把所有"慢方法"死记硬背地列进一个大切点，一旦有新方法加入就得记得去改切面，非常脆弱。
+  </p>
+  <p>
+    Participant 模式反过来：让每个类自己声明"我有哪些慢方法"（通过类里内嵌的切点），
+    切面只负责统一收集所有类"报名"的切点，然后套用同一套通知逻辑。类和切面通过一个共同的"角色"（切点名字或标记接口）来协作。
+  </p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 640 240" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow-ch12-3" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <rect class="box" x="30" y="30" width="150" height="50" rx="8"/>
+      <text x="105" y="60" text-anchor="middle" font-size="12">Analytics 类</text>
+      <rect class="box" x="30" y="100" width="150" height="50" rx="8"/>
+      <text x="105" y="130" text-anchor="middle" font-size="12">Document 类</text>
+      <rect class="box" x="30" y="170" width="150" height="50" rx="8"/>
+      <text x="105" y="200" text-anchor="middle" font-size="12">新增的 XyzService 类</text>
+
+      <text x="235" y="60" font-size="11" class="dim">声明自己的</text>
+      <text x="235" y="74" font-size="11" class="dim">slowOperation() 切点</text>
+      <text x="235" y="130" font-size="11" class="dim">声明自己的</text>
+      <text x="235" y="144" font-size="11" class="dim">slowOperation() 切点</text>
+      <text x="235" y="200" font-size="11" class="dim">同样声明一个</text>
+      <text x="235" y="214" font-size="11" class="dim">slowOperation() 切点即可"参与"</text>
+
+      <path class="arrow-accent" d="M180,55 L440,110" marker-end="url(#arrow-ch12-3)"/>
+      <path class="arrow-accent" d="M180,125 L440,115" marker-end="url(#arrow-ch12-3)"/>
+      <path class="arrow-accent" d="M180,195 L440,125" marker-end="url(#arrow-ch12-3)"/>
+
+      <rect class="accentbox" x="440" y="85" width="170" height="60" rx="10"/>
+      <text x="525" y="110" text-anchor="middle" font-size="13">WaitCursorAspect</text>
+      <text x="525" y="128" text-anchor="middle" font-size="11" class="dim">统一 before/after 加/去等待光标</text>
+    </svg>
+    <div class="caption">图 12-3　participant 模式：每个类自己"报名"哪些方法慢，切面不需要知道具体是谁</div>
+  </div>
+
+  <div class="code">
+    <div class="file">类里声明自己的切点（供切面收集）</div>
+    <pre><code><span class="tok-kw">public class</span> Analytics {
+    <span class="tok-cm">// 类自己最清楚哪些方法慢，由类来声明，而不是让切面死记硬背</span>
+    <span class="tok-kw">public</span> <span class="tok-kw">pointcut</span> slowOperation()
+        : execution(* Analytics.monteCarloSimulation())
+          || execution(* Analytics.updateDatabase());
+}
+
+<span class="tok-kw">public aspect</span> WaitCursorManagementAspect {
+    <span class="tok-kw">pointcut</span> allSlowOperations() : Analytics.slowOperation() || Document.slowOperation();
+
+    <span class="tok-kw">before</span>() : allSlowOperations() { WaitCursor.set(); }
+    <span class="tok-kw">after</span>()  : allSlowOperations() { WaitCursor.unset(); }
+}</code></pre>
+  </div>
+  <p>
+    书中还提到一种改进版——"注解驱动的 participant 模式"：与其在类里写 AspectJ 专属的 <code class="inline">pointcut</code> 语法，
+    不如让类的方法标一个 <code class="inline">@SlowOperation</code> 注解，切面用 <code class="inline">@annotation(SlowOperation)</code> 统一匹配。
+    这样类完全不需要引入 AspectJ 语法依赖，纯注解就能"报名参与"，这也是第 13、16 章并发控制和领域逻辑里反复用到的手法。
+  </p>
+
+  <div class="exercise">
+    <span class="label">✏️ 动手练习</span>
+    <p>
+      打开仓库 <code class="inline">ch12/workspace/Section12.1.4GettingReturnValueWithoutAspects</code> 和
+      <code class="inline">Section12.1.4GettingReturnValueWithAspects</code> 两个文件夹对比着看，
+      数一数"不用切面"版本里重复了多少遍取返回值的样板代码；再试着把 worker object 模式里的
+      <code class="inline">Runnable</code> 换成 <code class="inline">Callable&lt;T&gt;</code> + <code class="inline">Future&lt;T&gt;</code>，
+      体会现代并发 API 其实是把这套模式标准化了。
+    </p>
+  </div>
+
+  <h2>小结 &amp; 自测</h2>
+  <ul class="quiz">
+    <li class="q">worker object 模式解决的核心问题是什么？
+      <div class="a">把"执行某个连接点"这件事从一次性、同步的方法调用，变成一个可以传递、可以延后、可以交给别的执行环境（线程池、事务管理器等）处理的对象。</div>
+    </li>
+    <li class="q">wormhole 模式和普通的层层传参相比，优势和代价分别是什么？
+      <div class="a">优势是不用修改中间每一层方法的签名，加新的上下文字段也不影响中间层 API；代价是它依赖 cflow()，只能在真正的 AspectJ 织入下使用，且会让"数据是怎么传过来的"变得不那么直观，需要良好的文档和命名来弥补可读性。</div>
+    </li>
+    <li class="q">participant 模式为什么比"把所有匹配条件写进一个大切点"更健壮？
+      <div class="a">因为特征相关的知识（比如"这个方法慢不慢"）被放回了最了解它的类自己身上，新增类只需要自己声明参与，而不需要回头修改中心切面，避免了类和切面之间的紧耦合和遗漏风险。</div>
+    </li>
+    <li class="q">为什么 wormhole 模式没法用 Spring AOP 实现？
+      <div class="a">因为它依赖 cflow() 切点来判断"当前调用是否发生在另一个连接点的控制流中"，而 Spring AOP 是基于动态代理的运行时拦截，没有 AspectJ 织入器那样对完整调用链的静态分析能力。</div>
+    </li>
+    <li class="q">今天写"报名参与"式的代码，为什么更推荐用注解而不是 AspectJ 原生的 pointcut 语法？
+      <div class="a">因为标注 @SlowOperation 这样的注解，类本身不需要依赖 AspectJ 的语法/编译器，仍然是一个纯 Java 类，只有真正用到切面功能的模块才需要引入 AspectJ，耦合更松，也更容易被其它非 AspectJ 场景（比如反射框架）复用。</div>
+    </li>
+  </ul>
+
+  <div class="pagenav">
+    <a class="prev" href="ch11.html"><span class="lbl">上一章</span>第 11 章：用切面强制执行规范</a>
+    <a class="next" href="ch13.html"><span class="lbl">下一章</span>第 13 章：并发控制</a>
+  </div>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

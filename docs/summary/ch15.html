@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第 15 章：应用安全 | AspectJ in Action 图解笔记</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar">
+  <a href="index.html">&larr; 全部章节</a>
+  <span>AspectJ in Action · 图解笔记</span>
+</div>
+<div class="page">
+
+  <span class="kicker">CHAPTER 15</span>
+  <h1>应用安全</h1>
+  <p class="subtitle">一句话概括本章：认证（你是谁）和授权（你能干什么）本质上都是"在方法执行前插一段检查代码"——这正是切面最擅长的事。本章带你从零手写一遍安全切面，再看懂 Spring Security 现在是怎么用切面帮你把这些活都干了的。</p>
+
+  <div class="covers">
+    <h4>本章你将学到</h4>
+    <ul>
+      <li>认证（Authentication）与授权（Authorization）的区别，以及为什么它们都是横切关注点</li>
+      <li>如何手写一个认证切面 + 授权切面，理解 Spring Security 底层的工作原理</li>
+      <li>用注解驱动授权（<code class="inline">@Secured</code> / <code class="inline">@PreAuthorize</code>）</li>
+      <li>字段级权限控制——以及为什么这必须用完整的 AspectJ，Spring AOP 做不到</li>
+    </ul>
+  </div>
+
+  <h2>1. 认证 ≠ 授权</h2>
+  <p>
+    很多初学者会把这两个词混着用，但它们是两件完全不同的事：<b>认证（Authentication）</b>回答"你是谁"——通常是核验用户名密码；
+    <b>授权（Authorization）</b>回答"你能不能做这件事"——比如只有 <code class="inline">ADMIN</code> 角色才能删除商品。
+    一次请求通常要先过认证，再过授权，两道关卡都得通过才能真正执行业务方法。
+  </p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 640 260" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow-ch15-1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <rect class="box" x="10" y="90" width="110" height="56" rx="10"/>
+      <text x="65" y="123" text-anchor="middle">请求进入</text>
+
+      <rect class="accentbox" x="170" y="90" width="130" height="56" rx="10"/>
+      <text x="235" y="115" text-anchor="middle" font-size="13">认证切面</text>
+      <text x="235" y="133" text-anchor="middle" font-size="11" class="dim">“你是谁？”</text>
+
+      <rect class="accentbox" x="350" y="90" width="130" height="56" rx="10"/>
+      <text x="415" y="115" text-anchor="middle" font-size="13">授权切面</text>
+      <text x="415" y="133" text-anchor="middle" font-size="11" class="dim">“你能干这个吗？”</text>
+
+      <rect class="newbox" x="530" y="90" width="100" height="56" rx="10"/>
+      <text x="580" y="123" text-anchor="middle" font-size="13">目标方法</text>
+
+      <path class="arrow" d="M120,118 L165,118" marker-end="url(#arrow-ch15-1)"/>
+      <path class="arrow" d="M300,118 L345,118" marker-end="url(#arrow-ch15-1)"/>
+      <path class="arrow" d="M480,118 L525,118" marker-end="url(#arrow-ch15-1)"/>
+
+      <path class="arrow" d="M235,146 C 235,200 130,200 90,200" marker-end="url(#arrow-ch15-1)" style="stroke:var(--old)"/>
+      <rect class="oldbox" x="10" y="205" width="150" height="40" rx="8"/>
+      <text x="85" y="230" text-anchor="middle" font-size="12">401 未认证</text>
+
+      <path class="arrow" d="M415,146 C 415,200 320,200 300,205" marker-end="url(#arrow-ch15-1)" style="stroke:var(--old)"/>
+      <rect class="oldbox" x="220" y="205" width="150" height="40" rx="8"/>
+      <text x="295" y="230" text-anchor="middle" font-size="12">403 无权限</text>
+    </svg>
+    <div class="caption">图 15-1　认证切面和授权切面依次拦截请求，任何一关不通过就中断执行</div>
+  </div>
+
+  <div class="callout tip">
+    <span class="label">💡 类比</span>
+    <p>把安全检查想象成进大楼：门口保安核对你的工牌确认"你是公司员工"（认证），电梯里的门禁卡读卡器再判断"你能不能刷到 8 楼的机房"（授权）。这两道关卡分别由两个独立的"检查员"（切面）负责，业务楼层里的人完全不需要关心保安是怎么工作的。</p>
+  </div>
+
+  <h2>2. 从零手写认证 &amp; 授权切面</h2>
+  <p>
+    书中在 <code class="inline">ch15/workspace/Section15.4.1ImplementingAuthenticationAspect</code> 里演示了一个思路：
+    把"要不要认证""在哪认证"这些决策做成一个抽象切面，具体的选点逻辑交给子切面决定——这其实就是第 6 章讲过的抽象切面模式。
+  </p>
+
+  <div class="code">
+    <div class="file">ajia/security/AbstractAuthenticationAspect.java（书中写法，字段类型微调后仍可用）</div>
+    <pre><code>@Aspect
+public abstract class AbstractAuthenticationAspect {
+    private AuthenticationSupport authenticationSupport;
+
+    @Pointcut
+    public abstract void authenticationRequired();  <span class="tok-cm">// 交给子切面定义“在哪拦”</span>
+
+    @Before("authenticationRequired()")
+    public void authenticate() {
+        authenticationSupport.authenticate();        <span class="tok-cm">// 具体怎么认证，交给支持类</span>
+    }
+    <span class="tok-cm">// setter 省略</span>
+}</code></pre>
+  </div>
+
+  <p>
+    授权切面的结构几乎一样，只是把 <code class="inline">authenticate()</code> 换成 <code class="inline">authorize(JoinPoint jp)</code>，
+    因为授权要知道"当前访问的是哪个连接点"，才能查出这个方法需要什么角色。书中给了两种选点方式：
+  </p>
+
+  <table class="tbl">
+    <tr><th>选点方式</th><th>做法</th><th>优点</th><th>缺点</th></tr>
+    <tr>
+      <td>不用注解</td>
+      <td><code class="inline">execution(* ajia.service..*.*(..))</code> 按包名匹配</td>
+      <td>业务代码零侵入</td>
+      <td>安全规则藏在切点表达式和外部映射表里，不直观、易碎</td>
+    </tr>
+    <tr>
+      <td>用注解</td>
+      <td><code class="inline">@Secured("ROLE_SUPERVISOR")</code> 标在类/方法上</td>
+      <td>规则和代码放在一起，一目了然</td>
+      <td>业务类多了一个安全相关的注解依赖</td>
+    </tr>
+  </table>
+
+  <h2>3. 今天怎么做：Spring Security 的方法级安全</h2>
+  <p>
+    书里手写的这套"切点 + 支持类 + AccessDecisionManager"，正是 <b>Spring Security 方法安全</b>的工作原理——
+    没错，Spring Security 的 <code class="inline">@Secured</code> / <code class="inline">@PreAuthorize</code> 本身就是靠 Spring AOP 实现的一个 Advisor。
+    回忆一下第 9 章讲的"Spring AOP 只能代理 Spring 容器管理的 Bean"：这正是为什么方法级安全默认只能保护 Service 层的 Bean，而管不到用 <code class="inline">new</code> 创建的领域对象。
+  </p>
+
+  <div class="versus">
+    <div class="col old">
+      <div class="tag">书中写法（已过时）</div>
+      <ul>
+        <li>手写 <code class="inline">AbstractAuthenticationAspect</code> / <code class="inline">AbstractAuthorizationAspect</code></li>
+        <li>XML 配置 <code class="inline">&lt;security:authentication-manager&gt;</code>，<code class="inline">factory-method="aspectOf"</code></li>
+        <li>旧版 Spring Security（Acegi 血统）</li>
+      </ul>
+    </div>
+    <div class="col new">
+      <div class="tag">推荐的现代写法</div>
+      <ul>
+        <li>Spring Boot 3.x + Spring Security 6.x</li>
+        <li><code class="inline">@EnableMethodSecurity</code> 开启方法级安全</li>
+        <li><code class="inline">@PreAuthorize("hasRole('SUPERVISOR')")</code> 用 SpEL 表达式直接写在方法上</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="code">
+    <div class="file">现代等价写法：无需自己写切面</div>
+    <pre><code><span class="tok-ann">@Configuration</span>
+<span class="tok-ann">@EnableMethodSecurity</span> <span class="tok-cm">// Spring Security 6.x：默认已支持 @PreAuthorize/@PostAuthorize</span>
+public class SecurityConfig {
+
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        return http
+            .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
+            .httpBasic(Customizer.withDefaults())
+            .build();
+    }
+}
+
+<span class="tok-cm">// 业务类：完全不需要手写切面，也不用配置 XML</span>
+<span class="tok-ann">@Secured</span>("ROLE_SUPERVISOR") <span class="tok-cm">// 或者更推荐用下面这行</span>
+<span class="tok-ann">@PreAuthorize</span>("hasRole('SUPERVISOR')")
+public void expireProduct(Product product) { ... }</code></pre>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">⚠️ 版本提醒</span>
+    <p>
+      Spring Security 5 之前依赖 <code class="inline">GlobalMethodSecurityConfiguration</code> + <code class="inline">@EnableGlobalMethodSecurity</code>，这个注解在 Spring Security 6 中已被废弃，
+      统一改为 <code class="inline">@EnableMethodSecurity</code>。<code class="inline">@Secured</code>/<code class="inline">@RolesAllowed</code> 仍然可用，
+      但官方推荐优先使用支持 SpEL 表达式的 <code class="inline">@PreAuthorize</code>/<code class="inline">@PostAuthorize</code>，可以写更灵活的规则，例如书中 15.6.2 节提到的"只有部门经理才能操作本部门商品"：
+      <code class="inline">@PreAuthorize("#product.department.manager.name == authentication.name")</code>。
+    </p>
+  </div>
+
+  <h2>4. 字段级权限：为什么 Spring AOP 做不到</h2>
+  <p>
+    书中 15.5 节举了一个很好的例子：医疗系统里，保险专员能看到"某项检查做过没有"，但看不到具体的检查结果——这是<b>字段级</b>的权限，而不是方法级或对象级。
+    Spring AOP 基于 JDK 动态代理 / CGLIB，本质上是在对象<b>外面</b>套一层壳，只能拦截"从外部调用某个公开方法"这件事，根本看不到、也拦不住对字段的直接读写。
+    要做到字段级拦截，必须用完整的 AspectJ 编译期/加载期织入，直接在字节码层面改写字段访问指令。
+  </p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 640 260" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow-ch15-2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="currentColor"/>
+        </marker>
+      </defs>
+
+      <text x="150" y="24" text-anchor="middle" font-size="13" font-weight="700">Spring AOP 代理（只能守门）</text>
+      <rect class="box" x="50" y="40" width="200" height="150" rx="6"/>
+      <rect class="accentbox" x="30" y="30" width="240" height="170" rx="10" fill-opacity="0.15"/>
+      <rect x="90" y="60" width="40" height="30" fill="var(--bg)" stroke="var(--accent)"/>
+      <text x="110" y="80" text-anchor="middle" font-size="10">方法门</text>
+      <rect x="180" y="60" width="40" height="30" fill="var(--bg)" stroke="var(--accent)"/>
+      <text x="200" y="80" text-anchor="middle" font-size="10">方法门</text>
+      <rect x="90" y="140" width="130" height="20" fill="var(--old-bg)" stroke="var(--old)" stroke-dasharray="3,2"/>
+      <text x="155" y="154" text-anchor="middle" font-size="10">字段（无窗，代理看不到）</text>
+      <text x="150" y="215" text-anchor="middle" font-size="11" class="dim">只能拦“调用公开方法”</text>
+
+      <text x="480" y="24" text-anchor="middle" font-size="13" font-weight="700">完整 AspectJ 织入（连窗户也管）</text>
+      <rect class="box" x="380" y="40" width="200" height="150" rx="6"/>
+      <rect class="newbox" x="360" y="30" width="240" height="170" rx="10" fill-opacity="0.15"/>
+      <rect x="420" y="60" width="40" height="30" fill="var(--bg)" stroke="var(--new)"/>
+      <text x="440" y="80" text-anchor="middle" font-size="10">方法门</text>
+      <rect x="510" y="60" width="40" height="30" fill="var(--bg)" stroke="var(--new)"/>
+      <text x="530" y="80" text-anchor="middle" font-size="10">方法门</text>
+      <rect x="420" y="140" width="130" height="20" fill="var(--new-bg)" stroke="var(--new)"/>
+      <text x="485" y="154" text-anchor="middle" font-size="10">字段（get/set 直接被织入拦截）</text>
+      <text x="480" y="215" text-anchor="middle" font-size="11" class="dim">连 get(...)/set(...) 都能拦</text>
+    </svg>
+    <div class="caption">图 15-2　Spring AOP 代理像外墙只有门（方法）没有可控窗户（字段）；AspectJ 织入连窗户都能装上门禁</div>
+  </div>
+
+  <div class="code">
+    <div class="file">ajia/security/AccessFieldSecurityAspect.java（书中写法，思路不过时，只需升级依赖包名）</div>
+    <pre><code><span class="tok-ann">@Aspect</span>
+public class AccessFieldSecurityAspect {
+    private AuthorizationSupport securitySupport;
+
+    <span class="tok-ann">@Pointcut</span>("(get(@Access * *) || set(@Access * *)) &amp;&amp; @annotation(access)")
+    public void secureFieldAccess(Access access) {}
+
+    <span class="tok-ann">@Before</span>("secureFieldAccess(access)")
+    public void secure(Access access) {
+        securitySupport.authorize(access);   <span class="tok-cm">// get/set 之前先查权限</span>
+    }
+}
+
+<span class="tok-cm">// 领域对象里只需要一个注解</span>
+public class Product {
+    <span class="tok-ann">@Access</span>("ROLE_SUPERVISOR") private double price;
+}</code></pre>
+  </div>
+
+  <div class="callout modern">
+    <span class="label">🔧 现代化提示</span>
+    <p>
+      这套字段级拦截思路本身没有过时，只是原书用的 <code class="inline">org.springframework.security.access.vote.*</code> 包在 Spring Security 6 中已重构（例如 <code class="inline">AccessDecisionManager</code> 体系已被更灵活的
+      <code class="inline">AuthorizationManager&lt;T&gt;</code> 取代），迁移时建议实现新的 <code class="inline">AuthorizationManager</code> 接口而不是继续用旧的 Voter 体系。
+      至于 AspectJ 编译/织入部分，直接沿用 <code class="inline">dev.aspectj:aspectj-maven-plugin</code> 即可，语法完全兼容。
+    </p>
+  </div>
+
+  <div class="exercise">
+    <span class="label">✏️ 动手练习</span>
+    <p>
+      打开仓库 <code class="inline">ch15/workspace/Section15.5ImplementingFieldLevelAuthorization</code>，跑一下 <code class="inline">AccessFieldSecurityAspectTest</code>。
+      然后试着给 <code class="inline">Product</code> 类再加一个 <code class="inline">@Access("ROLE_ADMIN")</code> 标注的字段，观察不同角色访问时的行为差异——体会一下"同一个对象，对不同调用方展现不同的可见性"。
+    </p>
+  </div>
+
+  <h2>小结 &amp; 自测</h2>
+  <ul class="quiz">
+    <li class="q">认证和授权分别回答什么问题？
+      <div class="a">认证回答"你是谁"（身份核验）；授权回答"你能不能做这件事"（权限判断）。一次请求通常先认证后授权。</div>
+    </li>
+    <li class="q">为什么说 Spring Security 的方法安全"本质上就是 AOP"？
+      <div class="a">因为 <code class="inline">@PreAuthorize</code> 等注解正是通过 Spring AOP 给 Bean 生成代理、在代理里插入一段权限检查逻辑实现的，和书中手写的授权切面是同一套原理。</div>
+    </li>
+    <li class="q">为什么字段级权限控制不能用 Spring AOP 实现，必须用完整的 AspectJ？
+      <div class="a">Spring AOP 基于代理，只能拦截"从代理外部调用某个公开方法"；字段的读写不经过方法调用，代理感知不到。完整 AspectJ 通过织入直接修改字节码里的 <code class="inline">getfield</code>/<code class="inline">putfield</code> 指令，所以能拦截字段访问。</div>
+    </li>
+    <li class="q">书中的 <code class="inline">factory-method="aspectOf"</code> 配置是做什么用的？现代 Spring 还需要吗？
+      <div class="a">当切面由 AspectJ 织入器创建（而不是 Spring 容器 <code class="inline">new</code> 出来）时，要通过 <code class="inline">aspectOf()</code> 静态方法拿到切面的单例实例再注入依赖。如果改用纯 Spring AOP（<code class="inline">@Aspect</code> + <code class="inline">@EnableAspectJAutoProxy</code>），切面本身就是一个普通 Bean，不需要这个配置。</div>
+    </li>
+    <li class="q">现代 Spring Security 推荐用 <code class="inline">@PreAuthorize</code> 还是 <code class="inline">@Secured</code>？
+      <div class="a">推荐 <code class="inline">@PreAuthorize</code>，因为它支持 SpEL 表达式，可以写出比"某个角色"更复杂的规则（比如结合方法参数判断）；<code class="inline">@Secured</code> 只能声明角色，功能更受限，但配置更简单。</div>
+    </li>
+  </ul>
+
+  <div class="pagenav">
+    <a class="prev" href="ch14.html"><span class="lbl">上一章</span>第 14 章：事务管理</a>
+    <a class="next" href="ch16.html"><span class="lbl">下一章</span>第 16 章：改善领域逻辑</a>
+  </div>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

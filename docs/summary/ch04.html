@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第 4 章：用动态切面修改行为 | AspectJ in Action 图解笔记</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar">
+  <a href="index.html">&larr; 全部章节</a>
+  <span>AspectJ in Action · 图解笔记</span>
+</div>
+<div class="page">
+
+  <span class="kicker">CHAPTER 04</span>
+  <h1>用动态切面修改行为</h1>
+  <p class="subtitle">一句话概括本章：连接点是“在哪插手”，通知（advice）就是“插手时具体做什么”——本章讲清 5 种通知的区别，以及万能的 around 通知怎么写。</p>
+
+  <div class="covers">
+    <h4>本章你将学到</h4>
+    <ul>
+      <li>before / after / after-returning / after-throwing / around 五种通知的语义与写法</li>
+      <li>为什么只有 around 通知有 <code class="inline">proceed()</code>，它到底代表什么</li>
+      <li>如何在通知里拿到方法参数、目标对象、返回值、异常等"连接点上下文"</li>
+      <li>用真实例子搭一个缓存切面和一个失败重试切面</li>
+    </ul>
+  </div>
+
+  <h2>1. 通知：连接点上要执行的动作</h2>
+  <p>
+    如果说切点（pointcut）回答的是"<strong>在哪个时刻</strong>插手"，那通知（advice）回答的就是"<strong>插手时具体干什么</strong>"。
+    AspectJ 提供 5 种通知，覆盖了几乎所有横切场景：
+  </p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 660 260" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow-ch04-1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <rect class="accentbox" x="240" y="90" width="200" height="70" rx="10"/>
+      <text x="340" y="120" text-anchor="middle" font-size="13">被通知的方法体</text>
+      <text x="340" y="138" text-anchor="middle" font-size="12" class="dim">（一个连接点的执行过程）</text>
+
+      <line x1="240" y1="200" x2="440" y2="200" stroke="var(--text-dim)" stroke-width="1.5"/>
+      <text x="150" y="80" text-anchor="middle" font-size="12.5" fill="var(--accent-text)">before</text>
+      <path class="arrow" d="M150,88 L235,110" style="color:var(--accent)" marker-end="url(#arrow-ch04-1)"/>
+
+      <text x="530" y="80" text-anchor="middle" font-size="12.5" fill="var(--good)">after returning</text>
+      <path class="arrow" d="M445,120 C480,100 500,90 525,88" style="color:var(--good)" marker-end="url(#arrow-ch04-1)"/>
+
+      <text x="530" y="150" text-anchor="middle" font-size="12.5" fill="var(--old)">after throwing</text>
+      <path class="arrow" d="M445,140 C480,150 500,150 525,148" style="color:var(--old)" marker-end="url(#arrow-ch04-1)"/>
+
+      <text x="340" y="235" text-anchor="middle" font-size="12.5" class="dim">after（finally）：不管成功失败，都会执行——就像 try/finally 里的 finally</text>
+
+      <rect x="205" y="60" width="270" height="150" rx="14" fill="none" stroke="var(--old)" stroke-width="2" stroke-dasharray="6,4"/>
+      <text x="340" y="45" text-anchor="middle" font-size="12.5" fill="var(--old)">around：把整个方法体包起来，靠 proceed() 决定要不要、以及怎么继续执行原逻辑</text>
+    </svg>
+    <div class="caption">图 4-1　五种通知相对于"被通知方法"的时机关系</div>
+  </div>
+
+  <table class="tbl">
+    <tr><th>通知类型</th><th>执行时机</th><th>典型用途</th></tr>
+    <tr><td><code class="inline">before</code></td><td>方法执行前</td><td>权限校验、参数校验、记录开始时间</td></tr>
+    <tr><td><code class="inline">after returning</code></td><td>方法正常返回后</td><td>记录成功日志、处理返回值</td></tr>
+    <tr><td><code class="inline">after throwing</code></td><td>方法抛出异常后</td><td>异常日志、告警</td></tr>
+    <tr><td><code class="inline">after</code>（finally）</td><td>不论成功失败都执行</td><td>释放资源、结束计时</td></tr>
+    <tr><td><code class="inline">around</code></td><td>包裹整个方法执行</td><td>缓存、重试、事务、性能统计——凡是需要"改变是否执行/执行几次/改返回值"的场景</td></tr>
+  </table>
+
+  <div class="callout tip">
+    <span class="label">💡 类比</span>
+    <p>
+      把方法调用想象成一次“送快递”。<code class="inline">before</code> 是快递员出发前的安检；<code class="inline">after returning</code> 是签收成功后的短信通知；
+      <code class="inline">after throwing</code> 是包裹丢失后的理赔提醒；<code class="inline">after</code> 是不管有没有签收都会发的“已完结”记录；
+      而 <code class="inline">around</code> 相当于你自己就是那个快递公司——可以决定要不要真的发货、发几次、甚至直接拿仓库里现成的货顶替（这就是缓存的原理）。
+    </p>
+  </div>
+
+  <h2>2. around 通知与 proceed()：唯一能"改变是否执行"的通知</h2>
+  <p>
+    只有 <code class="inline">around</code> 通知里能调用 <code class="inline">proceed()</code>——它的意思是"现在，请真正执行一次被织入的原始逻辑"。
+    不调用 <code class="inline">proceed()</code>，原方法体就<strong>完全不会执行</strong>；调用它一次，等价于正常执行一次；甚至可以调用多次（比如重试）、或者带着不同参数调用（比如篡改输入）。
+  </p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 640 240" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="320" cy="120" r="100" class="box"/>
+      <circle cx="320" cy="120" r="65" class="accentbox"/>
+      <circle cx="320" cy="120" r="30" fill="var(--new-bg)" stroke="var(--new)"/>
+      <text x="320" y="45" text-anchor="middle" font-size="12">缓存切面 around</text>
+      <text x="320" y="80" text-anchor="middle" font-size="11.5" class="dim">重试切面 around</text>
+      <text x="320" y="124" text-anchor="middle" font-size="11" fill="var(--new)">原始方法体</text>
+      <text x="320" y="200" text-anchor="middle" font-size="12" class="dim">proceed() 就是"往内一层走一步"</text>
+      <text x="320" y="218" text-anchor="middle" font-size="12" class="dim">多个切面叠加时，像洋葱一样层层包裹同一个方法</text>
+    </svg>
+    <div class="caption">图 4-2　多个 around 通知叠加时形成"洋葱"结构：每一层的 proceed() 都是调用更内一层</div>
+  </div>
+
+  <div class="code">
+    <div class="file">around 通知的基本形状（传统语法）</div>
+    <pre><code>Object around(Connection connection)
+    : connectionOperation(connection) {
+    long startTime = System.nanoTime();
+    Object ret = proceed(connection);      <span class="tok-cm">// 真正执行原方法</span>
+    System.out.println("耗时: " + (System.nanoTime() - startTime));
+    return ret;                            <span class="tok-cm">// around 必须显式返回值</span>
+}</code></pre>
+  </div>
+
+  <h2>3. 实战一：用 around 通知实现缓存</h2>
+  <p>
+    仓库 <code class="inline">ch04/workspace/Section4.4.2ImplementingSimpleCaching</code> 里有一个很经典的缓存切面例子：先定义一个 <code class="inline">@Cachable</code> 注解标记"这个方法的返回值可以缓存"，
+    再写一个 around 通知——命中缓存就直接返回缓存值，不命中就调用 <code class="inline">proceed()</code> 执行原方法并把结果存起来。
+  </p>
+  <div class="code">
+    <div class="file">ajia/caching/CacheAspect.aj（书中原版，基于已停止维护的 OSCache）</div>
+    <pre><code><span class="tok-kw">public aspect</span> CacheAspect {
+    <span class="tok-kw">private</span> Cache cache = <span class="tok-kw">new</span> Cache(<span class="tok-kw">true</span>, <span class="tok-kw">true</span>, <span class="tok-kw">false</span>);
+
+    <span class="tok-kw">public pointcut</span> cachedAccess(Object arg, Cachable cachable)
+        : execution(@Cachable * *(*)) && args(arg) && @annotation(cachable);
+
+    Object around(Object arg, Cachable cachable) : cachedAccess(arg, cachable) {
+        String key = cachable.cacheStore() + ":" + arg;
+        <span class="tok-kw">try</span> {
+            <span class="tok-kw">return</span> cache.getFromCache(key);
+        } <span class="tok-kw">catch</span> (NeedsRefreshException ex) {
+            Object value = proceed(arg, cachable);
+            cache.putInCache(key, value);
+            <span class="tok-kw">return</span> value;
+        }
+    }
+}</code></pre>
+  </div>
+
+  <div class="versus">
+    <div class="col old">
+      <div class="tag">书中依赖（已过时）</div>
+      <ul>
+        <li><code class="inline">com.opensymphony.oscache</code> —— 早已停止维护</li>
+        <li>需要理解 <code class="inline">NeedsRefreshException</code> 这种反直觉的"用异常表示未命中"设计</li>
+      </ul>
+    </div>
+    <div class="col new">
+      <div class="tag">推荐的现代写法</div>
+      <ul>
+        <li>用 <code class="inline">ConcurrentHashMap</code> 或 Caffeine 自己实现缓存存取，逻辑更直白</li>
+        <li>@AspectJ 注解语法，<code class="inline">javac</code> 直接可编译</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="code">
+    <div class="file">现代等价写法：@AspectJ 语法 + 普通 Map 缓存</div>
+    <pre><code><span class="tok-ann">@Aspect</span>
+<span class="tok-kw">public class</span> CacheAspect {
+    <span class="tok-kw">private final</span> Map&lt;String, Object&gt; cache = <span class="tok-kw">new</span> ConcurrentHashMap&lt;&gt;();
+
+    <span class="tok-ann">@Around</span>(<span class="tok-str">"execution(@ajia.caching.Cachable * *(*)) "</span> +
+            <span class="tok-str">"&amp;&amp; args(arg) &amp;&amp; @annotation(cachable)"</span>)
+    <span class="tok-kw">public</span> Object cache(ProceedingJoinPoint pjp, Object arg, Cachable cachable) <span class="tok-kw">throws</span> Throwable {
+        String key = cachable.cacheStore() + <span class="tok-str">":"</span> + arg;
+        <span class="tok-kw">return</span> cache.computeIfAbsent(key, k -&gt; {
+            <span class="tok-kw">try</span> { <span class="tok-kw">return</span> pjp.proceed(); }
+            <span class="tok-kw">catch</span> (Throwable t) { <span class="tok-kw">throw new</span> RuntimeException(t); }
+        });
+    }
+}</code></pre>
+  </div>
+
+  <div class="callout modern">
+    <span class="label">🚀 现实项目里怎么做</span>
+    <p>
+      如果你的项目本来就用 Spring，完全不需要自己写这个切面——加上 <code class="inline">spring-boot-starter-cache</code> 依赖，
+      在方法上标一个 <code class="inline">@Cacheable("chart")</code> 注解就够了，Spring 会用它自己的 AOP 代理帮你实现同样的效果。
+      本节手写的版本，价值在于让你理解 <code class="inline">@Cacheable</code> 背后到底发生了什么——这正是学 AspectJ 的意义：先懂原理，再放心用框架。
+    </p>
+  </div>
+
+  <h2>4. 实战二：用 around 通知实现失败重试</h2>
+  <p>
+    <code class="inline">ch04/workspace/Section4.3.3ImplementingFaultTolerance</code> 展示了另一个经典场景：远程调用可能失败，用 <code class="inline">@Idempotent</code>（幂等，意味着"重试是安全的"）标记方法，切面负责自动重试。
+  </p>
+  <div class="code">
+    <div class="file">ajia/faulttolerance/FailureHandlingAspect.aj（书中原版）</div>
+    <pre><code><span class="tok-kw">public aspect</span> FailureHandlingAspect {
+    <span class="tok-kw">private final int</span> MAX_RETRIES = 3;
+
+    Object around() : call(@Idempotent * *(..)) {
+        <span class="tok-kw">int</span> retry = 0;
+        <span class="tok-kw">while</span> (<span class="tok-kw">true</span>) {
+            <span class="tok-kw">try</span> {
+                <span class="tok-kw">return</span> proceed();
+            } <span class="tok-kw">catch</span> (RemoteAccessException ex) {
+                <span class="tok-kw">if</span> (++retry &gt; MAX_RETRIES) <span class="tok-kw">throw</span> ex;
+            }
+        }
+    }
+}</code></pre>
+  </div>
+  <p>
+    这里用的是 <code class="inline">call()</code> 而不是 <code class="inline">execution()</code>——因为重试逻辑只需要在调用远程服务的那一侧生效，不需要侵入远程服务内部的实现（呼应第 3 章讲的 call vs. execution 的取舍）。
+  </p>
+
+  <div class="callout modern">
+    <span class="label">🚀 现实项目里怎么做</span>
+    <p>
+      现代 Spring 项目通常直接用 <strong>Spring Retry</strong>（<code class="inline">@Retryable</code> 注解）或 <strong>resilience4j</strong> 来做重试和熔断，
+      它们本质上也是靠 AOP 代理 + around 逻辑实现的——理解了这一节，你就理解了 <code class="inline">@Retryable</code> 的工作原理。
+    </p>
+  </div>
+
+  <h2>5. 收集连接点上下文</h2>
+  <p>
+    通知光知道"什么时候执行"还不够，往往还需要知道"当时的参数是什么、目标对象是谁、抛出了什么异常"。这些信息统称为<strong>连接点上下文</strong>，主要通过在切点里声明参数来收集：
+  </p>
+  <ul>
+    <li><code class="inline">args(arg)</code> — 收集方法参数</li>
+    <li><code class="inline">target(obj)</code> — 收集方法调用的目标对象</li>
+    <li><code class="inline">@annotation(ann)</code> — 收集方法上的注解实例</li>
+    <li><code class="inline">thisJoinPoint</code> — 一个特殊变量，随时可用，包含连接点的文字描述、参数数组等反射信息（第 3 章追踪例子里已经见过）</li>
+  </ul>
+
+  <div class="exercise">
+    <span class="label">✏️ 动手练习</span>
+    <p>
+      打开 <code class="inline">ch04/workspace/Section4.3.3ImplementingFaultTolerance</code>，把 <code class="inline">MAX_RETRIES</code> 改成 1，多运行几次 <code class="inline">RemoteClient</code>
+      （<code class="inline">RemoteService.getReply()</code> 有 75% 概率模拟失败），观察重试次数用尽后抛出异常的输出；
+      再试着把 <code class="inline">around</code> 换成 <code class="inline">before</code> 写同样的重试逻辑，你会发现根本写不出来——这就是"只有 around 能控制是否执行/执行几次"的直接证明。
+    </p>
+  </div>
+
+  <h2>小结 &amp; 自测</h2>
+  <ul class="quiz">
+    <li class="q">为什么只有 around 通知能实现缓存？
+      <div class="a">因为缓存命中时需要"完全跳过原方法、直接返回缓存值"——这要求通知能决定是否执行原逻辑，而 before/after 系列通知无法阻止原方法执行，只有 around 的 proceed() 机制能做到。</div>
+    </li>
+    <li class="q">after 和 after returning 的区别？
+      <div class="a">after（finally）不管方法是正常返回还是抛异常都会执行；after returning 只在方法正常返回时执行，如果抛异常则不会触发。</div>
+    </li>
+    <li class="q">around 通知里，忘记调用 proceed() 会发生什么？
+      <div class="a">被通知的原方法体完全不会执行——这有时是有意为之（比如权限拦截直接拒绝），但更多时候是新手忘写导致的 bug。</div>
+    </li>
+    <li class="q">多个 around 通知同时作用在同一个方法上时，它们是什么关系？
+      <div class="a">像洋葱一样层层嵌套：外层的 proceed() 调用的正是内层通知，最终才会到达原始方法体；调用顺序由切面优先级决定（第 6 章会讲）。</div>
+    </li>
+    <li class="q">args()、target()、@annotation() 这些切点是用来做什么的？
+      <div class="a">收集连接点上下文——把方法参数、目标对象、注解实例这些运行时信息，通过命名一致的参数传递给通知方法使用。</div>
+    </li>
+  </ul>
+
+  <div class="pagenav">
+    <a class="prev" href="ch03.html"><span class="lbl">上一章</span>第 3 章：理解连接点模型</a>
+    <a class="next" href="ch05.html"><span class="lbl">下一章</span>第 5 章：用静态切面修改结构</a>
+  </div>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第 8 章：AspectJ 的织入方式 | AspectJ in Action 图解笔记</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar">
+  <a href="index.html">&larr; 全部章节</a>
+  <span>AspectJ in Action · 图解笔记</span>
+</div>
+<div class="page">
+
+  <span class="kicker">CHAPTER 08</span>
+  <h1>AspectJ 的织入方式</h1>
+  <p class="subtitle">一句话概括本章：切面写好了，什么时候、用什么方式把它“焊”进程序里？本章讲清楚编译期织入、二进制织入、加载期织入这三条路怎么选。</p>
+
+  <div class="covers">
+    <h4>本章你将学到</h4>
+    <ul>
+      <li>织入的两个维度：什么时候织（build-time / load-time）、织什么输入（源码 / 字节码）</li>
+      <li>编译期源码织入、编译期二进制织入、加载期织入（LTW）三种模式的原理与取舍</li>
+      <li><code class="inline">-javaagent</code> + <code class="inline">META-INF/aop.xml</code> 是怎么在 JVM 启动时“劫持”类加载的</li>
+      <li>现代项目该怎么选：几乎总是编译期织入或 Spring AOP 代理，LTW 只在特殊场景使用</li>
+    </ul>
+  </div>
+
+  <h2>1. 织入的两个分类维度</h2>
+  <p>
+    "织入（weaving）"就是把切面代码和业务代码合并成最终可执行程序的过程。书里从两个维度给织入方式分类：
+  </p>
+  <ul>
+    <li><b>什么时候织</b>：编译期（build-time，程序还没跑起来就织好了）还是加载期（load-time，程序启动、类被加载的那一刻才织）。</li>
+    <li><b>织什么输入</b>：源码（.java/.aj 文件）还是字节码（已经编译好的 .class/.jar，比如第三方库）。</li>
+  </ul>
+  <p>组合起来正好是本章要讲的三种主要模式：</p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 660 340" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow-ch08-1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="currentColor"/>
+        </marker>
+      </defs>
+
+      <text x="20" y="26" font-size="13" font-weight="700">① 编译期源码织入</text>
+      <rect class="box" x="20" y="36" width="120" height="46" rx="8"/>
+      <text x="80" y="64" text-anchor="middle" font-size="12">.java / .aj 源码</text>
+      <path class="arrow" d="M142,59 L188,59" marker-end="url(#arrow-ch08-1)"/>
+      <rect class="accentbox" x="190" y="36" width="90" height="46" rx="8"/>
+      <text x="235" y="64" text-anchor="middle" font-size="12" font-family="monospace">ajc</text>
+      <path class="arrow" d="M282,59 L328,59" marker-end="url(#arrow-ch08-1)"/>
+      <rect class="newbox" x="330" y="36" width="150" height="46" rx="8"/>
+      <text x="405" y="64" text-anchor="middle" font-size="12">已织入的 .class</text>
+
+      <text x="20" y="126" font-size="13" font-weight="700">② 编译期二进制织入</text>
+      <rect class="box" x="20" y="136" width="120" height="46" rx="8"/>
+      <text x="80" y="164" text-anchor="middle" font-size="12">.class / .jar</text>
+      <path class="arrow" d="M142,159 L188,159" marker-end="url(#arrow-ch08-1)"/>
+      <rect class="accentbox" x="190" y="136" width="90" height="46" rx="8"/>
+      <text x="235" y="164" text-anchor="middle" font-size="12" font-family="monospace">ajc -inpath</text>
+      <path class="arrow" d="M282,159 L328,159" marker-end="url(#arrow-ch08-1)"/>
+      <rect class="newbox" x="330" y="136" width="150" height="46" rx="8"/>
+      <text x="405" y="164" text-anchor="middle" font-size="12">已织入的 .class/.jar</text>
+      <text x="500" y="164" text-anchor="middle" class="dim" font-size="11.5">适合：没有源码，只有第三方 jar</text>
+
+      <text x="20" y="226" font-size="13" font-weight="700">③ 加载期织入 LTW</text>
+      <rect class="box" x="20" y="236" width="120" height="46" rx="8"/>
+      <text x="80" y="264" text-anchor="middle" font-size="12">未织入的 .class</text>
+      <path class="arrow" d="M142,259 L188,259" marker-end="url(#arrow-ch08-1)"/>
+      <rect class="accentbox" x="190" y="236" width="150" height="46" rx="8"/>
+      <text x="265" y="258" text-anchor="middle" font-size="11.5" font-family="monospace">-javaagent</text>
+      <text x="265" y="272" text-anchor="middle" font-size="11.5">JVM 类加载钩子</text>
+      <path class="arrow" d="M342,259 L388,259" marker-end="url(#arrow-ch08-1)"/>
+      <rect class="newbox" x="390" y="236" width="150" height="46" rx="8"/>
+      <text x="465" y="258" text-anchor="middle" font-size="12">织入后交给 JVM</text>
+      <text x="465" y="272" text-anchor="middle" font-size="11">（运行期间才发生）</text>
+      <text x="560" y="264" text-anchor="middle" class="dim" font-size="11.5">适合：不能/不想重新编译部署</text>
+
+      <text x="330" y="320" text-anchor="middle" class="dim" font-size="12">三条路产生的最终字节码效果相同，区别只是“在哪个时间点付出织入的成本”</text>
+    </svg>
+    <div class="caption">图 8-1　三种织入方式的流水线对比</div>
+  </div>
+
+  <div class="callout tip">
+    <span class="label">💡 类比</span>
+    <p>
+      编译期织入像“装修时把水管预埋进墙里”——一次到位，后面用起来最省心，但要动工前就规划好。
+      加载期织入像“用明装线槽走线”——房子已经装好也能加，随时能改，但多了一层线槽，且改起来要小心别碰坏原有装修（性能/兼容性代价）。
+    </p>
+  </div>
+
+  <h2>2. 编译期织入：source vs. binary</h2>
+  <p>
+    最常见、最好理解的方式是<b>源码织入</b>：把 <code class="inline">ajc</code> 当成 <code class="inline">javac</code> 的替代品，直接吃源码吐字节码。
+    现代项目里，这一步由 Maven/Gradle 插件自动完成，你几乎不会手写 <code class="inline">ajc</code> 命令。
+  </p>
+  <p>
+    如果你没有源码（比如切面来自第三方 jar，或者业务类是第三方库），可以用<b>二进制织入</b>：直接把已编译的
+    <code class="inline">.class</code>/<code class="inline">.jar</code> 喂给 <code class="inline">ajc</code>，让它在字节码层面完成织入。
+    本质上，源码织入内部也是"先编译成字节码，再做二进制织入"，只是这一步对你透明。
+  </p>
+
+  <div class="code">
+    <div class="file">概念示意：ajc 命令（现代项目里由 Maven 插件自动生成，不需要手敲）</div>
+    <pre><code><span class="tok-cm"># 源码织入：把切面源码和业务源码一起编译</span>
+ajc ajia/banking/*.java ajia/tracing/TraceAspect.aj
+
+<span class="tok-cm"># 二进制织入：业务代码已经是 jar，切面代码也是 jar</span>
+ajc -inpath services.jar -aspectpath monitoring.jar -outjar woven.jar</code></pre>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">⚠️ 容易踩的坑</span>
+    <p>
+      和 <code class="inline">javac</code> 不同，<code class="inline">ajc</code> 要求把所有互相关联的源文件<b>一次性</b>传入。
+      分两次单独编译 <code class="inline">ajc ajia/banking/*.java</code> 和 <code class="inline">ajc TraceAspect.aj</code>，并不会织入成功——因为
+      第一条命令根本不知道 <code class="inline">TraceAspect</code> 的存在。现代 Maven 插件会自动把整个模块的源码集一起传给编译器，避免了这个问题。
+    </p>
+  </div>
+
+  <h2>3. 加载期织入（LTW）：JVM 启动时“劫持”类加载</h2>
+  <p>
+    LTW 的核心机制是 JVM 的 <b>Java Agent</b>（书中提到底层用的是 JVMTI，现代 JDK 一直保留了这套机制）。
+    启动 JVM 时加一个参数：<code class="inline">-javaagent:aspectjweaver.jar</code>，AspectJ 的织入器就会挂钩到类加载流程上——
+    每当 JVM 要把某个类的字节码正式加载进内存，都会先“路过”织入器，织入器检查这个类是否需要织入切面，需要的话就地修改字节码，再交还给 JVM。
+  </p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 640 260" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow-ch08-2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <rect class="box" x="20" y="20" width="150" height="46" rx="8"/>
+      <text x="95" y="48" text-anchor="middle" font-size="12">JVM 启动</text>
+      <path class="arrow" d="M95,66 L95,96" marker-end="url(#arrow-ch08-2)"/>
+
+      <rect class="accentbox" x="20" y="100" width="150" height="52" rx="8"/>
+      <text x="95" y="122" text-anchor="middle" font-size="11.5">-javaagent 加载</text>
+      <text x="95" y="138" text-anchor="middle" font-size="11.5">aspectjweaver.jar</text>
+      <path class="arrow" d="M170,126 L216,126" marker-end="url(#arrow-ch08-2)"/>
+
+      <rect class="box" x="220" y="100" width="180" height="52" rx="8"/>
+      <text x="310" y="122" text-anchor="middle" font-size="11.5">读取 classpath 下所有</text>
+      <text x="310" y="138" text-anchor="middle" font-size="11.5" font-family="monospace">META-INF/aop.xml</text>
+      <path class="arrow" d="M400,126 L446,126" marker-end="url(#arrow-ch08-2)"/>
+
+      <rect class="newbox" x="450" y="100" width="170" height="52" rx="8"/>
+      <text x="535" y="122" text-anchor="middle" font-size="11.5">注册"类加载事件"</text>
+      <text x="535" y="138" text-anchor="middle" font-size="11.5">监听器</text>
+
+      <path class="arrow" d="M535,152 L535,182" marker-end="url(#arrow-ch08-2)"/>
+      <rect class="oldbox" x="380" y="186" width="240" height="52" rx="8"/>
+      <text x="500" y="208" text-anchor="middle" font-size="11.5">应用正常运行，每次 JVM 要</text>
+      <text x="500" y="224" text-anchor="middle" font-size="11.5">加载一个新类……</text>
+
+      <path class="arrow" d="M380,212 L230,212" marker-end="url(#arrow-ch08-2)"/>
+      <rect class="accentbox" x="30" y="186" width="200" height="52" rx="8"/>
+      <text x="130" y="204" text-anchor="middle" font-size="11.5">织入器拦截、检查是否</text>
+      <text x="130" y="220" text-anchor="middle" font-size="11.5">匹配 aop.xml 里的切面</text>
+    </svg>
+    <div class="caption">图 8-2　加载期织入（LTW）时序图：从 JVM 启动到每次类加载都会经过织入器</div>
+  </div>
+
+  <p>你需要在 classpath 上放一个 <code class="inline">META-INF/aop.xml</code>，告诉织入器"要织哪些切面"：</p>
+
+  <div class="code">
+    <div class="file">仓库真实文件：ch08/workspace/Section8.4LoadTimeWeaver/src/main/resources/META-INF/aop.xml</div>
+    <pre><code>&lt;aspectj&gt;
+    &lt;aspects&gt;
+        &lt;!-- Monitoring 是一个抽象切面，只声明了抽象的 monitored() 切点 --&gt;
+        &lt;concrete-aspect name=<span class="tok-str">"ajia.monitoring.JDBCMonitoring"</span>
+                          extends=<span class="tok-str">"ajia.monitoring.Monitoring"</span>&gt;
+            &lt;pointcut name=<span class="tok-str">"monitored"</span> expression=<span class="tok-str">"call(* java.sql.*.*(..))"</span> /&gt;
+        &lt;/concrete-aspect&gt;
+    &lt;/aspects&gt;
+&lt;/aspectj&gt;</code></pre>
+  </div>
+  <p>
+    这份 XML 用 <code class="inline">&lt;concrete-aspect&gt;</code> 给上一章那个抽象的 <code class="inline">Monitoring</code> 切面（<code class="inline">monitored()</code> 是抽象切点）
+    补上了具体定义——"只监控 JDBC 调用"，而且<b>不需要重新编译 Java 代码</b>，改一下 XML、重启应用就能换监控范围。
+  </p>
+
+  <div class="code">
+    <div class="file">启动方式（现代命令行等价写法）</div>
+    <pre><code><span class="tok-cm"># 书中年代（2009）的旧路径写法</span>
+java -javaagent:C:\aspectj1.6.5\lib\aspectjweaver.jar -jar app.jar
+
+<span class="tok-cm"># 现代等价写法：用 Maven 依赖坐标定位 jar，Java 17/21 上原理完全一样</span>
+java -javaagent:$HOME/.m2/repository/org/aspectj/aspectjweaver/1.9.22/aspectjweaver-1.9.22.jar \
+     -jar app.jar</code></pre>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">⚠️ JPMS（模块系统）与容器化环境的额外注意事项</span>
+    <p>
+      在 Java 9+ 的模块化世界里，<code class="inline">-javaagent</code> 依然管用，但如果织入器需要访问某些模块内部的类，
+      可能要额外加 <code class="inline">--add-opens</code>。在 Spring Boot 可执行 jar（fat jar）里使用 LTW 也需要额外配置类加载器
+      （<code class="inline">-Dspring.application.class-loader</code> 或使用 <code class="inline">@EnableLoadTimeWeaving</code>，第 9 章会讲）。
+      容器/K8s 场景下修改启动命令加 <code class="inline">-javaagent</code> 也比较麻烦，这些都是现代项目更倾向于用编译期织入或 Spring AOP 代理、
+      而不是 LTW 的现实原因。
+    </p>
+  </div>
+
+  <h2>4. 现代项目该怎么选？</h2>
+  <div class="versus">
+    <div class="col old">
+      <div class="tag">书中年代（2009）的建议</div>
+      <ul>
+        <li>团队用 Eclipse + AJDT → 传统语法 + 编译期织入</li>
+        <li>探索阶段、临时诊断问题 → LTW，改完就关掉，不留痕迹</li>
+        <li>Java 5 时代 LTW 配置简单，优先考虑 LTW</li>
+      </ul>
+    </div>
+    <div class="col new">
+      <div class="tag">现代项目推荐</div>
+      <ul>
+        <li>Spring / Spring Boot 项目 → 优先用 Spring AOP 代理（ch09），不需要任何织入器</li>
+        <li>需要 ITD 等原生能力 → Maven/Gradle 插件做编译期织入，IDE 支持已经很成熟（IntelliJ IDEA 内置 AspectJ 支持）</li>
+        <li>只在“运行中的第三方系统临时挂诊断切面”这种场景才考虑 LTW</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="exercise">
+    <span class="label">✏️ 动手练习</span>
+    <p>
+      打开仓库 <code class="inline">ch08/workspace/Section8.4LoadTimeWeaver/</code>，阅读 <code class="inline">run1.sh</code>/<code class="inline">run2.sh</code>/<code class="inline">run3.sh</code> 三个脚本，
+      理清它们分别对应"先跑一遍原始应用 → 编译并复制切面 jar → 加上 -javaagent 重启"这三步。
+      尝试把 <code class="inline">aop.xml</code> 里的切点表达式从 <code class="inline">call(* java.sql.*.*(..))</code> 改成同时监控某个业务包，观察输出变化。
+    </p>
+  </div>
+
+  <h2>小结 &amp; 自测</h2>
+  <ul class="quiz">
+    <li class="q">编译期织入和加载期织入，最终产生的字节码有区别吗？
+      <div class="a">没有本质区别——两者产出的“织入后字节码”是一样的，区别只是“在什么时间点付出织入的代价”：编译期在构建时付，加载期在每次类加载时付（带来一定的启动性能开销）。</div>
+    </li>
+    <li class="q">什么场景下必须用编译期织入，不能拖到加载期？
+      <div class="a">涉及类型间声明（ITD）等改变类结构的静态横切时：如果等到加载期才发现某个类多了一个方法，那些在编译期就引用了这个新方法的代码早就编译失败了。</div>
+    </li>
+    <li class="q">LTW 依赖哪个 JVM 参数生效？
+      <div class="a"><code class="inline">-javaagent:&lt;path&gt;/aspectjweaver.jar</code>，配合 classpath 上的 <code class="inline">META-INF/aop.xml</code> 说明要织哪些切面。</div>
+    </li>
+    <li class="q">aop.xml 里的切点表达式有什么限制，是不能用 args() 收集参数吗？
+      <div class="a">是的——XML 语法里定义的切点不能收集连接点上下文（不能用 args() 绑定参数），只适合做“范围限定”，具体的通知逻辑还是要写在 Java 切面里。</div>
+    </li>
+    <li class="q">为什么现代 Spring Boot 项目很少用 LTW？
+      <div class="a">因为 Spring AOP 的代理机制（下一章）不需要任何 -javaagent 或字节码织入就能实现绝大多数场景的 AOP 需求，配置更简单、启动更快、和 fat jar/容器化部署的兼容性也更好；只有需要织入非 Spring 管理的对象、或需要 AspectJ 全部能力时才考虑 LTW。</div>
+    </li>
+  </ul>
+
+  <div class="pagenav">
+    <a class="prev" href="ch07.html"><span class="lbl">上一章</span>第 7 章：深入 @AspectJ 注解语法</a>
+    <a class="next" href="ch09.html"><span class="lbl">下一章</span>第 9 章：与 Spring 集成</a>
+  </div>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

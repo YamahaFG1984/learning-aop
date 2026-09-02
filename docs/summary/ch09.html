@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第 9 章：与 Spring 集成 | AspectJ in Action 图解笔记</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar">
+  <a href="index.html">&larr; 全部章节</a>
+  <span>AspectJ in Action · 图解笔记</span>
+</div>
+<div class="page">
+
+  <span class="kicker">CHAPTER 09</span>
+  <h1>与 Spring 集成</h1>
+  <p class="subtitle">一句话概括本章：Spring 自带一套"轻量版 AOP"——本质是给 Bean 套一层代理；理解它的能力边界，才知道什么时候该换成真正的 AspectJ 织入。</p>
+
+  <div class="covers">
+    <h4>本章你将学到</h4>
+    <ul>
+      <li>Spring AOP 的底层原理：JDK 动态代理 与 CGLIB/ByteBuddy 代理</li>
+      <li>为什么"自己调自己"的方法不会被增强（经典的自调用陷阱）</li>
+      <li>用 <code class="inline">@Aspect</code> 注解在 Spring 里写切面（不用配 XML）</li>
+      <li>什么时候 Spring AOP 不够用，需要请出完整版 AspectJ</li>
+    </ul>
+  </div>
+
+  <h2>1. Spring AOP 是什么：一个"代理生成器"</h2>
+  <p>
+    前几章讲的 AspectJ 是"编译器级别"的 AOP：它直接把切面代码焊进 <code class="inline">.class</code> 字节码里，
+    所以理论上能拦截任何连接点——方法调用、字段访问、对象创建……几乎无所不能。
+  </p>
+  <p>
+    但 Spring 不想强迫所有用户都去搞编译期/类加载期织入这么"重"的东西。于是 Spring 发明了自己的一套 AOP 实现——
+    <strong>Spring AOP</strong>。它的原理简单粗暴：<strong>不改字节码，而是在运行时给目标 Bean 套一层"代理壳"</strong>。
+  </p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 640 260" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow-ch09-1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <text x="80" y="30" text-anchor="middle" font-size="13" class="dim">客户端代码</text>
+      <rect class="box" x="20" y="45" width="120" height="50" rx="8"/>
+      <text x="80" y="75" text-anchor="middle">Controller</text>
+
+      <rect class="accentbox" x="220" y="30" width="180" height="90" rx="10"/>
+      <text x="310" y="52" text-anchor="middle" font-size="12" font-weight="700">代理对象 Proxy</text>
+      <text x="310" y="72" text-anchor="middle" font-size="11" class="dim">先执行 advice</text>
+      <text x="310" y="88" text-anchor="middle" font-size="11" class="dim">（日志/事务/权限…）</text>
+      <rect class="box" x="470" y="45" width="150" height="50" rx="8"/>
+      <text x="545" y="70" text-anchor="middle" font-size="12">真正的目标 Bean</text>
+      <text x="545" y="86" text-anchor="middle" font-size="11" class="dim">InventoryService</text>
+
+      <path class="arrow" d="M140,70 L215,70" marker-end="url(#arrow-ch09-1)"/>
+      <path class="arrow" d="M400,70 L465,70" marker-end="url(#arrow-ch09-1)"/>
+
+      <line x1="20" y1="150" x2="620" y2="150" stroke="var(--border)" stroke-dasharray="4 4"/>
+      <text x="20" y="145" font-size="11" class="dim">目标 Bean 内部：</text>
+
+      <rect class="box" x="460" y="165" width="160" height="55" rx="8"/>
+      <text x="540" y="188" text-anchor="middle" font-size="12">removeProduct()</text>
+      <text x="540" y="204" text-anchor="middle" font-size="11" class="dim">内部调用 this.xxx()</text>
+      <rect class="box" x="220" y="165" width="160" height="55" rx="8"/>
+      <text x="300" y="188" text-anchor="middle" font-size="12">isProductAvailable()</text>
+      <text x="300" y="204" text-anchor="middle" font-size="11" class="dim">同一个 Bean 内的方法</text>
+
+      <path d="M455,192 L385,192" stroke="var(--old)" stroke-width="2" stroke-dasharray="5 3" fill="none" marker-end="url(#arrow-ch09-1)"/>
+      <text x="420" y="238" text-anchor="middle" font-size="12" fill="var(--old)">⚠️ 绕过了代理，不会被增强！</text>
+    </svg>
+    <div class="caption">图 9-1　外部调用经过代理会被增强；同一个 Bean 内部"自己调自己"（self-invocation）会绕过代理</div>
+  </div>
+
+  <div class="callout tip">
+    <span class="label">💡 类比</span>
+    <p>
+      Spring AOP 就像给快递包裹套的"塑封膜"（代理）：只有快递员从外面拿快递时才会经过安检（advice）。
+      但如果收件人自己在仓库内部把东西从一个箱子挪到另一个箱子（Bean 内部自调用），根本不会经过大门的安检机——
+      因为压根没有"拆包裹再装箱"这个外部动作。
+    </p>
+  </div>
+
+  <p>
+    这就是 Spring AOP 最典型的"坑"：<strong>只有通过代理对象发起的调用才会被增强</strong>。
+    如果 <code class="inline">removeProduct()</code> 内部直接调用了同一个类里的 <code class="inline">isProductAvailable()</code>，
+    这次调用是 <code class="inline">this.isProductAvailable()</code>，压根没有经过代理，切面自然不会生效。
+  </p>
+  <p>
+    书里给出的补救办法是用 <code class="inline">AopContext.currentProxy()</code> 拿到当前代理再调用——但这样业务代码就"知道"了自己被代理，
+    属于无奈之举，不推荐常态化使用。<strong>如果你经常需要拦截自调用，这就是该换用真正 AspectJ 织入的信号。</strong>
+  </p>
+
+  <h2>2. 两种代理：接口用 JDK 动态代理，类用字节码代理</h2>
+  <table class="tbl">
+    <tr><th>目标 Bean 的形态</th><th>Spring 使用的代理方式</th><th>限制</th></tr>
+    <tr><td>实现了接口</td><td>JDK <code class="inline">java.lang.reflect.Proxy</code> 动态代理</td><td>代理对象只能声明为接口类型</td></tr>
+    <tr><td>没有实现接口的具体类</td><td>运行时生成子类（历史上用 CGLIB，现代 Spring 内置了 Spring-repackaged ByteBuddy）</td><td>无法代理 <code class="inline">final</code> 类 / <code class="inline">final</code> 方法</td></tr>
+  </table>
+  <div class="callout modern">
+    <span class="label">🔧 版本变化</span>
+    <p>
+      书里讲的是独立的 <code class="inline">cglib</code> 第三方库。从 Spring Framework 6 / Spring Boot 3 开始，
+      Spring 已经把动态子类代理换成了内部打包的 <strong>ByteBuddy</strong>（<code class="inline">spring-core</code> 自带，
+      类名类似 <code class="inline">org.springframework.cglib...</code> 只是历史包名保留），你不需要再手动引入 <code class="inline">cglib</code> 依赖，
+      Spring Boot 会自动处理好一切。
+    </p>
+  </div>
+
+  <p>为了直观理解"代理"到底是什么，可以先看一个不用 Spring、纯 JDK 的最小例子（对应仓库 <code class="inline">ch09/workspace/Section9.2.1DynamicProxy</code>）：</p>
+
+  <div class="code">
+    <div class="file">TracingInvocationHandler.java（JDK 动态代理，写法本身不过时）</div>
+    <pre><code>public class TracingInvocationHandler implements InvocationHandler {
+    private final Object target;
+
+    public TracingInvocationHandler(Object target) {
+        this.target = target;
+    }
+
+    @Override
+    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+        System.out.println("Entering " + method);
+        return method.invoke(target, args); // 手动转发给真正的目标对象
+    }
+}</code></pre>
+  </div>
+  <p>
+    Spring AOP 做的事情本质上跟这段代码一样：<code class="inline">invoke()</code> 里先跑一遍你写的通知逻辑，再转发给真正的目标方法。
+    区别只是 Spring 把"生成代理 + 匹配切点 + 调用通知链"这一整套自动化了，你只需要声明切点。
+  </p>
+
+  <h2>3. 用 <code class="inline">@Aspect</code> 写 Spring 切面：告别 XML</h2>
+  <p>对应仓库示例 <code class="inline">ch09/workspace/Section9.1.2Utilizing@Aspect</code>，一个库存操作审计（audit log）的切面：</p>
+
+  <div class="code">
+    <div class="file">InventoryAuditing.java（@AspectJ 注解语法，现在依然是主流写法）</div>
+    <pre><code><span class="tok-ann">@Aspect</span>
+<span class="tok-kw">public class</span> InventoryAuditing {
+
+    <span class="tok-ann">@Pointcut</span>(<span class="tok-str">"execution(* *(ajia.domain.Product, int)) &amp;&amp; args(product, quantity)"</span>)
+    <span class="tok-kw">public void</span> audited(Product product, <span class="tok-kw">int</span> quantity) {}
+
+    <span class="tok-ann">@Before</span>(<span class="tok-str">"audited(product, quantity)"</span>)
+    <span class="tok-kw">public void</span> audit(JoinPoint jp, Product product, <span class="tok-kw">int</span> quantity) {
+        System.out.println(<span class="tok-str">"Audit: op="</span> + jp.getSignature().getName()
+            + <span class="tok-str">" product="</span> + product.getName() + <span class="tok-str">" qty="</span> + quantity);
+    }
+}</code></pre>
+  </div>
+
+  <div class="versus">
+    <div class="col old">
+      <div class="tag">书中写法（Spring 2.5 时代）</div>
+      <ul>
+        <li>手写 <code class="inline">application-context.xml</code></li>
+        <li>在 XML 里声明 <code class="inline">&lt;aop:aspectj-autoproxy/&gt;</code></li>
+        <li>手动把 <code class="inline">aspectjweaver.jar</code> 加进 classpath</li>
+      </ul>
+    </div>
+    <div class="col new">
+      <div class="tag">推荐的现代写法</div>
+      <ul>
+        <li>Spring Boot 3.x + <code class="inline">spring-boot-starter-aop</code></li>
+        <li>切面类打 <code class="inline">@Aspect</code> + <code class="inline">@Component</code>，交给组件扫描</li>
+        <li>不需要写任何 XML，也不用手写 <code class="inline">@EnableAspectJAutoProxy</code></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="code">
+    <div class="file">pom.xml（关键依赖）</div>
+    <pre><code>&lt;dependency&gt;
+    &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-boot-starter-aop&lt;/artifactId&gt;
+&lt;/dependency&gt;</code></pre>
+  </div>
+  <div class="callout modern">
+    <span class="label">🔧 为什么这一个依赖就够了</span>
+    <p>
+      <code class="inline">spring-boot-starter-aop</code> 会同时带来 <code class="inline">spring-aop</code> 和 <code class="inline">aspectjweaver</code>，
+      并且 Spring Boot 的自动配置（<code class="inline">AopAutoConfiguration</code>）会在检测到它时自动开启
+      <code class="inline">@EnableAspectJAutoProxy</code> 的效果——你只管写 <code class="inline">@Aspect</code> 类即可，
+      这也是普通 Spring（非 Boot）项目里手写 <code class="inline">@EnableAspectJAutoProxy</code> 或 XML <code class="inline">&lt;aop:aspectj-autoproxy/&gt;</code>
+      在 Boot 时代基本"消失"的原因。
+    </p>
+  </div>
+
+  <h2>4. Spring AOP 不够用了怎么办：请出完整版 AspectJ</h2>
+  <p>Spring AOP 只是"AspectJ 切点语法" + "代理"的组合，能力天生有边界：</p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 640 240" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow-ch09-2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <rect class="oldbox" x="20" y="20" width="280" height="200" rx="12"/>
+      <text x="160" y="45" text-anchor="middle" font-size="13" font-weight="700">Spring AOP（代理）</text>
+      <text x="45" y="72" font-size="12">✔ 只能增强 Spring 容器里的 Bean</text>
+      <text x="45" y="96" font-size="12">✔ 只能增强"外部发起"的方法调用</text>
+      <text x="45" y="120" font-size="12">✘ 不能增强 self-invocation</text>
+      <text x="45" y="144" font-size="12">✘ 不能增强 static 方法</text>
+      <text x="45" y="168" font-size="12">✘ 不能增强构造函数 / new</text>
+      <text x="45" y="192" font-size="12">✘ 不能增强字段读写</text>
+
+      <rect class="newbox" x="340" y="20" width="280" height="200" rx="12"/>
+      <text x="480" y="45" text-anchor="middle" font-size="13" font-weight="700">完整版 AspectJ（织入字节码）</text>
+      <text x="365" y="72" font-size="12">✔ 任何对象，不限于 Spring Bean</text>
+      <text x="365" y="96" font-size="12">✔ self-invocation 一样能增强</text>
+      <text x="365" y="120" font-size="12">✔ static 方法可以增强</text>
+      <text x="365" y="144" font-size="12">✔ 构造函数 / new 可以增强</text>
+      <text x="365" y="168" font-size="12">✔ 字段读写也能增强</text>
+      <text x="365" y="192" font-size="12">代价：需要编译期或类加载期织入</text>
+    </svg>
+    <div class="caption">图 9-2　Spring AOP 与完整版 AspectJ 的能力对比</div>
+  </div>
+
+  <p>
+    当你发现自己老是要绕开 self-invocation 限制、或者想拦截一个压根不是 Spring Bean 的普通对象（比如领域模型 <code class="inline">Order</code>、<code class="inline">Product</code>）时，
+    就该考虑让 Spring 把这些"非托管对象"也交给 AspectJ 的<strong>加载期织入（LTW）</strong>处理——书中 9.5 节的
+    <code class="inline">ch09/workspace/Section9.5.2Spring-drivenLTW</code> 示例演示的正是这种"Spring 驱动 LTW"的组合拳：
+    容器负责装配 Bean，AspectJ 负责在类加载时把切面焊进任意类（包括非 Bean 的领域对象）。
+  </p>
+
+  <h2>5. 该怎么选：决策指南</h2>
+  <div class="exercise">
+    <span class="label">🧭 一个简单的判断标准</span>
+    <p>
+      <strong>先用 Spring AOP。</strong>日志、鉴权、简单事务这类"只针对 Service 层方法"的需求，Spring AOP + <code class="inline">@Aspect</code> 已经足够，
+      配置简单、无需额外构建步骤。<br>
+      <strong>遇到下面任一情况再换 AspectJ：</strong>需要拦截 <code class="inline">new</code> 出来的领域对象、需要拦截 static 方法、
+      需要拦截同一个类内部的方法调用、或者目标对象根本不受 Spring 容器管理。
+    </p>
+  </div>
+
+  <div class="exercise">
+    <span class="label">✏️ 动手练习</span>
+    <p>
+      运行 <code class="inline">ch09/workspace/Section9.1.2Utilizing@Aspect</code> 里的例子，观察 <code class="inline">InventoryAuditing</code> 切面输出的审计日志；
+      然后故意在 <code class="inline">InventoryServiceStubImpl</code> 里让 <code class="inline">addProduct()</code> 内部调用同一个类的另一个方法，
+      看看这次调用是否还会打印审计日志——验证一下本章讲的"自调用陷阱"。
+    </p>
+  </div>
+
+  <h2>小结 &amp; 自测</h2>
+  <ul class="quiz">
+    <li class="q">Spring AOP 的底层实现方式是什么？
+      <div class="a">运行时生成代理对象（接口用 JDK 动态代理，具体类用字节码子类代理），在代理里插入通知逻辑再转发给真实对象，并不修改原始字节码。</div>
+    </li>
+    <li class="q">为什么 Bean 内部"自己调自己"的方法不会被增强？
+      <div class="a">因为切面只挂在代理对象上，自调用走的是 <code class="inline">this</code> 引用，直接命中原始目标对象，根本没有经过代理，所以通知链不会被触发。</div>
+    </li>
+    <li class="q">Spring Boot 项目里为什么很少见到 <code class="inline">@EnableAspectJAutoProxy</code>？
+      <div class="a">因为引入 <code class="inline">spring-boot-starter-aop</code> 后，Spring Boot 的自动配置会自动启用它，不需要手写。</div>
+    </li>
+    <li class="q">什么信号提示你应该从 Spring AOP 换成完整版 AspectJ？
+      <div class="a">需要拦截非 Spring Bean 对象、static 方法、构造函数、字段访问，或者被自调用问题反复困扰时。</div>
+    </li>
+  </ul>
+
+  <div class="pagenav">
+    <a class="prev" href="ch08.html"><span class="lbl">上一章</span>第 8 章：AspectJ 的织入方式</a>
+    <a class="next" href="ch10.html"><span class="lbl">下一章</span>第 10 章：监控类切面</a>
+  </div>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

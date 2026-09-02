@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>附录 A：搭建示例工程 | AspectJ in Action 图解笔记</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar">
+  <a href="index.html">&larr; 全部章节</a>
+  <span>AspectJ in Action · 图解笔记</span>
+</div>
+<div class="page">
+
+  <span class="kicker">APPENDIX A</span>
+  <h1>搭建示例工程</h1>
+  <p class="subtitle">一句话概括：全书反复出现的“电商库存系统” Commerce 是什么样子、为什么全书都用它，以及怎么用现代脚手架重新搭一遍。</p>
+
+  <div class="covers">
+    <h4>本章你将学到</h4>
+    <ul>
+      <li>贯穿全书的示例项目 Commerce 的业务场景与分层结构</li>
+      <li>为什么全书 16 章都复用同一个示例，而不是每章换一个新项目</li>
+      <li>书中 2010 年前后的技术栈（Spring 3 + JPA/Hibernate 3 + Ant/老式 Maven）该怎么对应到今天</li>
+    </ul>
+  </div>
+
+  <h2>1. Commerce 是一个什么样的项目？</h2>
+  <p>
+    Commerce 是一个很小的电商网站：用户可以浏览商品详情、把商品加入购物车、下单；
+    后端有一个简单的库存管理服务，负责扣减/补充库存。它足够小，能在一章的篇幅里看懂全貌；
+    但又足够真实——有 Web 层、业务层、持久化层，能装下事务管理、安全、缓存、并发控制等一整套
+    企业级横切关注点，正好用来演示每一章要讲的 AOP 技术。
+  </p>
+  <p>
+    这也是作者的一个刻意设计：<strong>全书 16 章共用同一个示例代码库</strong>（仓库里的
+    <code class="inline">appendixA/workspace/Commerce</code>），而不是每章重开一个新 demo。
+    好处是你不需要在每一章重新理解一套新业务，注意力可以完全放在“这一章的 AOP 技术怎么应用到我已经熟悉的代码上”。
+  </p>
+
+  <h2>2. 四层结构一图看懂</h2>
+  <div class="diagram">
+    <svg viewBox="0 0 640 300" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow-appa-1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <rect class="accentbox" x="60" y="20" width="520" height="50" rx="8"/>
+      <text x="320" y="50" text-anchor="middle" font-size="13">Web 层：OrderController / ProductController（@Controller）</text>
+
+      <rect class="box" x="60" y="95" width="520" height="50" rx="8"/>
+      <text x="320" y="125" text-anchor="middle" font-size="13">业务层：OrderService / InventoryService（@Service，事务边界在这里）</text>
+
+      <rect class="box" x="60" y="170" width="520" height="50" rx="8"/>
+      <text x="320" y="200" text-anchor="middle" font-size="13">领域对象：Order / Product / LineItem / InventoryItem</text>
+
+      <rect class="box" x="60" y="245" width="520" height="40" rx="8" stroke-dasharray="5,4"/>
+      <text x="320" y="270" text-anchor="middle" font-size="13" class="dim">持久化：Repository 接口 + JPA/Hibernate（视章节而定，也可换 JDBC）</text>
+
+      <path class="arrow" d="M320,70 L320,90" marker-end="url(#arrow-appa-1)"/>
+      <path class="arrow" d="M320,145 L320,165" marker-end="url(#arrow-appa-1)"/>
+      <path class="arrow" d="M320,220 L320,240" marker-end="url(#arrow-appa-1)"/>
+    </svg>
+    <div class="caption">图 A-1　Commerce 示例的四层结构：控制器 → 服务层 → 领域对象 → 持久化</div>
+  </div>
+
+  <p>
+    关键的领域类只有四个，故意设计得很简单：
+  </p>
+  <ul>
+    <li><code class="inline">DomainEntity</code> —— 抽象基类，只放一个 <code class="inline">id</code> 字段，避免每个实体类都重复写主键代码；</li>
+    <li><code class="inline">Product</code> —— 商品，有名称、描述、价格；</li>
+    <li><code class="inline">LineItem</code> —— 订单里的一行（某个商品 + 数量）；</li>
+    <li><code class="inline">Order</code> —— 订单，持有多个 <code class="inline">LineItem</code>，提供加/删商品、下单、取消等方法；</li>
+    <li><code class="inline">InventoryItem</code> —— 库存记录，提供扣减 <code class="inline">deplete()</code> / 补充 <code class="inline">replenish()</code> 库存的方法。</li>
+  </ul>
+
+  <div class="callout tip">
+    <span class="label">💡 贫血模型，先别急着嫌弃</span>
+    <p>
+      你会发现这些领域类基本只有 getter/setter，没什么“智能”的业务行为——这叫“贫血领域模型”。
+      作者是故意这么设计的：第 16 章会专门讨论如何用 AspectJ 把行为“注入”回这些领域对象，
+      让贫血模型重新变“胖”。所以这里的简单不是缺陷，是为后面的章节埋的伏笔。
+    </p>
+  </div>
+
+  <h2>3. 书中写法 vs. 今天该怎么搭</h2>
+  <p>
+    书写于 2010 年前后，用的是 Spring 3.0 + Spring MVC + JPA 1.0（Hibernate 3.3 实现）+
+    需要手动打包成 WAR、部署到独立 Tomcat；构建工具是 Maven 2.2（或 Ant，见附录 B）。
+    今天做同样的事情，几分钟就能用 Spring Boot 起一个等价的骨架。
+  </p>
+
+  <div class="versus">
+    <div class="col old">
+      <div class="tag">书中写法（2010 年前后）</div>
+      <ul>
+        <li>Spring 3.0 + Spring MVC，手写多份 XML 配置（<code class="inline">application-context.xml</code> / <code class="inline">web-context.xml</code> …）</li>
+        <li>JPA 1.0 + Hibernate 3.3，<code class="inline">persistence.xml</code> 手动配置方言</li>
+        <li>打包成 WAR，部署到独立安装的 Tomcat；或用 <code class="inline">mvn tomcat:run</code></li>
+        <li>Log4j 1.x（<code class="inline">log4j.xml</code>）</li>
+      </ul>
+    </div>
+    <div class="col new">
+      <div class="tag">推荐的现代写法</div>
+      <ul>
+        <li>Spring Boot 3.x（<code class="inline">spring-boot-starter-web</code>），零 XML，自动装配</li>
+        <li>Spring Data JPA + Hibernate 6（内置），或直接用 <code class="inline">JdbcClient</code></li>
+        <li>内嵌 Tomcat，<code class="inline">mvn spring-boot:run</code> 或直接跑 <code class="inline">main()</code></li>
+        <li>SLF4J + Logback（Spring Boot 默认自带）</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="code">
+    <div class="file">pom.xml（现代最小骨架，可直接对照书中 Commerce 项目使用）</div>
+    <pre><code>&lt;parent&gt;
+  &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+  &lt;artifactId&gt;spring-boot-starter-parent&lt;/artifactId&gt;
+  &lt;version&gt;3.3.4&lt;/version&gt;
+&lt;/parent&gt;
+
+&lt;properties&gt;
+  &lt;java.version&gt;17&lt;/java.version&gt;
+&lt;/properties&gt;
+
+&lt;dependencies&gt;
+  &lt;dependency&gt;
+    &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-boot-starter-web&lt;/artifactId&gt;
+  &lt;/dependency&gt;
+  &lt;dependency&gt;
+    &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-boot-starter-data-jpa&lt;/artifactId&gt;
+  &lt;/dependency&gt;
+  &lt;dependency&gt;
+    &lt;!-- 后面章节要用切面时，加上这一个依赖就够了 --&gt;
+    &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-boot-starter-aop&lt;/artifactId&gt;
+  &lt;/dependency&gt;
+  &lt;dependency&gt;
+    &lt;groupId&gt;com.h2database&lt;/groupId&gt;
+    &lt;artifactId&gt;h2&lt;/artifactId&gt;
+    &lt;scope&gt;runtime&lt;/scope&gt;
+  &lt;/dependency&gt;
+&lt;/dependencies&gt;</code></pre>
+  </div>
+
+  <p>
+    <code class="inline">Product</code>、<code class="inline">Order</code>、<code class="inline">LineItem</code>、
+    <code class="inline">InventoryItem</code> 这几个类里的 JPA 注解（<code class="inline">@Entity</code>、
+    <code class="inline">@ManyToOne</code>、<code class="inline">@OneToMany</code> ……）在 Jakarta EE 时代
+    改了包名，从 <code class="inline">javax.persistence.*</code> 换成了
+    <code class="inline">jakarta.persistence.*</code>，其余写法基本不用变——这是升级到 Spring Boot 3 时最容易踩的一个坑。
+  </p>
+
+  <div class="callout warn">
+    <span class="label">⚠️ 版本提醒</span>
+    <p>Spring Boot 版本号请以 <a href="https://spring.io/projects/spring-boot" target="_blank" rel="noopener">spring.io</a> 上的最新稳定版为准，这里的 3.3.4 只是示例。</p>
+  </div>
+
+  <div class="exercise">
+    <span class="label">✏️ 动手练习</span>
+    <p>
+      打开仓库里的 <code class="inline">appendixA/workspace/Commerce/src/main/java/ajia/</code>，
+      对照上面的四层结构图，找出 <code class="inline">domain</code>、<code class="inline">service</code>、
+      <code class="inline">repository</code>、<code class="inline">web</code> 四个包分别对应图里的哪一层；
+      再试着用上面的 <code class="inline">pom.xml</code> 骨架起一个新项目，把 <code class="inline">domain</code> 包下的四个类复制过去
+      （记得把 <code class="inline">javax.persistence</code> 换成 <code class="inline">jakarta.persistence</code>），感受一下从 XML 配置到 Spring Boot 自动装配的差别。
+    </p>
+  </div>
+
+  <h2>小结 &amp; 自测</h2>
+  <ul class="quiz">
+    <li class="q">为什么全书 16 章都复用同一个 Commerce 示例，而不是每章换新项目？
+      <div class="a">这样读者只需要理解一次业务场景，之后每一章都能把注意力完全放在“这一章的 AOP 技术怎么应用”上，而不用反复学习新的领域模型。</div>
+    </li>
+    <li class="q">Commerce 示例的四层结构分别是什么？
+      <div class="a">Web 层（Controller）→ 业务层（Service，事务边界所在）→ 领域对象（Order/Product/LineItem/InventoryItem）→ 持久化层（Repository + JPA/Hibernate）。</div>
+    </li>
+    <li class="q">什么是“贫血领域模型”？书里为什么故意这么设计？
+      <div class="a">指领域类只有数据和 getter/setter，没有承载业务行为。作者故意这样设计，是为第 16 章“用 AspectJ 给领域对象注入行为”做铺垫。</div>
+    </li>
+    <li class="q">把书中项目升级到 Spring Boot 3 时，最容易踩的一个坑是什么？
+      <div class="a">JPA 注解的包名从 <code class="inline">javax.persistence.*</code> 变成了 <code class="inline">jakarta.persistence.*</code>（Jakarta EE 命名空间迁移），漏改会导致编译或启动失败。</div>
+    </li>
+  </ul>
+
+  <div class="pagenav">
+    <a class="prev" href="ch17.html"><span class="lbl">上一章</span>第 17 章：迈出下一步</a>
+    <a class="next" href="appendixBC.html"><span class="lbl">下一章</span>附录 B/C：构建工具 Ant vs. Maven</a>
+  </div>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第 11 章：用切面强制执行规范 | AspectJ in Action 图解笔记</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar">
+  <a href="index.html">&larr; 全部章节</a>
+  <span>AspectJ in Action · 图解笔记</span>
+</div>
+<div class="page">
+
+  <span class="kicker">CHAPTER 11</span>
+  <h1>用切面强制执行规范</h1>
+  <p class="subtitle">一句话概括本章：与其在代码评审里反复提醒"别这样写"，不如让编译器自动帮你把关——这就是策略强制执行（policy enforcement）。</p>
+
+  <div class="covers">
+    <h4>本章你将学到</h4>
+    <ul>
+      <li>用 <code class="inline">declare error</code> / <code class="inline">declare warning</code> 让编译器主动报错，而不是等代码评审发现问题</li>
+      <li>用切面实现分层架构检查、封装性检查、工厂模式强制、"不返回 null 集合"等团队规范</li>
+      <li>AOP 规则强制 vs. Checkstyle/PMD/ArchUnit 这类静态分析工具，该怎么选</li>
+    </ul>
+  </div>
+
+  <h2>1. 为什么需要"会自己报错"的规则</h2>
+  <p>
+    团队里总有一些默认共识："UI 层不能直接连数据库""对象只能通过工厂创建""仓储方法别返回 null，返回空集合"。
+    这些规则通常写在 Wiki 或代码评审清单里——也就是说，全靠人记住、靠评审员发现。一旦有人忘了，
+    代码就悄悄"违规"了，往往要等到出 bug 才会被发现。
+  </p>
+  <p>
+    AspectJ 提供了一种更狠的做法：把这些规则写成切面里的 <code class="inline">declare error</code>，
+    编译器在编译时会像检查语法错误一样检查它们——不满足规则，代码直接编译不过。
+  </p>
+
+  <div class="callout tip">
+    <span class="label">💡 类比</span>
+    <p>
+      普通的代码规范文档，像是贴在墙上的"安全须知"，靠自觉遵守；
+      <code class="inline">declare error</code> 更像是电梯里的"超重蜂鸣器"——只要不符合规则，系统直接不让你通过，不用靠人盯着。
+    </p>
+  </div>
+
+  <h2>2. 编译期检查是怎么工作的</h2>
+  <p>
+    <code class="inline">declare error</code> 的语法很简单：给它一个切点表达式和一段错误信息。
+    只要有代码触发了这个切点，AspectJ 编译器就会在那一行标红报错，就像用错类型一样。
+  </p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 640 260" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow-ch11-1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <rect class="box" x="20" y="90" width="150" height="60" rx="10"/>
+      <text x="95" y="115" text-anchor="middle" font-size="13">业务源代码</text>
+      <text x="95" y="134" text-anchor="middle" font-size="11" class="dim">.java</text>
+
+      <rect class="accentbox" x="235" y="90" width="170" height="60" rx="10"/>
+      <text x="320" y="112" text-anchor="middle" font-size="13">AspectJ 编译器</text>
+      <text x="320" y="130" text-anchor="middle" font-size="11" class="dim">已加载 policy 切面规则</text>
+
+      <path class="arrow" d="M170,120 L230,120" style="color:var(--text-dim)" marker-end="url(#arrow-ch11-1)"/>
+
+      <rect class="newbox" x="470" y="30" width="150" height="50" rx="10"/>
+      <text x="545" y="60" text-anchor="middle" font-size="13">✅ 编译通过</text>
+
+      <rect class="oldbox" x="470" y="150" width="150" height="60" rx="10"/>
+      <text x="545" y="175" text-anchor="middle" font-size="13">🚫 编译失败</text>
+      <text x="545" y="193" text-anchor="middle" font-size="11">违反规则的那一行被标红</text>
+
+      <path class="arrow" d="M405,105 L465,55" style="color:var(--text-dim)" marker-end="url(#arrow-ch11-1)"/>
+      <path class="arrow" d="M405,135 L465,175" style="color:var(--text-dim)" marker-end="url(#arrow-ch11-1)"/>
+    </svg>
+    <div class="caption">图 11-1　规则切面被一起编译进构建过程，违规代码直接编译失败，而不是等运行时才发现</div>
+  </div>
+
+  <h3>2.1 例子：分层架构检查</h3>
+  <p>
+    书中的例子来自仓库 <code class="inline">ch11/workspace/Section11.1AOPBasedPolicyEnforcement</code>：
+    应用分成 web（界面）→ service（业务）→ repository（数据访问）→ 数据库 四层，规则是"只能跨越相邻一层调用，不能跳层"。
+  </p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 640 220" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow-ch11-2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <rect class="box" x="20" y="20" width="140" height="44" rx="8"/>
+      <text x="90" y="47" text-anchor="middle" font-size="12">ajia.web</text>
+      <rect class="box" x="20" y="84" width="140" height="44" rx="8"/>
+      <text x="90" y="111" text-anchor="middle" font-size="12">ajia.service</text>
+      <rect class="box" x="20" y="148" width="140" height="44" rx="8"/>
+      <text x="90" y="175" text-anchor="middle" font-size="12">ajia.repository</text>
+      <rect class="accentbox" x="220" y="148" width="140" height="44" rx="8"/>
+      <text x="290" y="175" text-anchor="middle" font-size="12">数据库 / JDBC</text>
+
+      <path class="arrow" d="M90,64 L90,80" marker-end="url(#arrow-ch11-2)"/>
+      <path class="arrow" d="M90,128 L90,144" marker-end="url(#arrow-ch11-2)"/>
+      <path class="arrow" d="M160,170 L215,170" marker-end="url(#arrow-ch11-2)"/>
+
+      <path d="M170,42 C420,42 420,170 365,170" fill="none" stroke="var(--old)" stroke-width="2" stroke-dasharray="5,4" marker-end="url(#arrow-ch11-2)"/>
+      <text x="430" y="35" text-anchor="middle" font-size="12" fill="var(--old)">🚫 web 直接跳过 service/repository</text>
+      <text x="430" y="52" text-anchor="middle" font-size="11" class="dim">declare error 会在这里报错</text>
+    </svg>
+    <div class="caption">图 11-2　web 层绕过 service/repository 直接访问数据库——LayeringViolation 切面会在编译期抓到它</div>
+  </div>
+
+  <div class="code">
+    <div class="file">ch11/workspace/.../ajia/architecture/SystemArchitecture.aj（描述分层结构，供其它切面复用）</div>
+    <pre><code><span class="tok-kw">public aspect</span> SystemArchitecture {
+    <span class="tok-kw">pointcut</span> webLayerCall()
+        : call(* ajia.web..*.*(..));
+    <span class="tok-kw">pointcut</span> inWebLayer()
+        : within(ajia.web..*);
+
+    <span class="tok-kw">pointcut</span> serviceLayerCall()
+        : call(* ajia.service..*.*(..));
+    <span class="tok-kw">pointcut</span> inServiceLayer()
+        : within(ajia.service..*);
+
+    <span class="tok-kw">pointcut</span> repositoryLayerCall()
+        : call(* ajia.repository..*.*(..));
+    <span class="tok-kw">pointcut</span> inRepositoryLayer()
+        : within(ajia.repository..*);
+
+    <span class="tok-kw">pointcut</span> dataLayerCall()
+        : JDBCPointcuts.jdbcCall() || JPAPointcuts.jpaCall();
+}</code></pre>
+  </div>
+
+  <div class="code">
+    <div class="file">ch11/workspace/.../ajia/architecture/LayeringViolation.aj（真正报错的规则）</div>
+    <pre><code><span class="tok-kw">public aspect</span> LayeringViolation {
+    <span class="tok-kw">declare error</span>
+      : SystemArchitecture.dataLayerCall()
+        &amp;&amp; !SystemArchitecture.inRepositoryLayer()
+      : <span class="tok-str">"Only the repository layer is allowed to access the data layer"</span>;
+
+    <span class="tok-kw">declare error</span>
+      : SystemArchitecture.webLayerCall()
+        &amp;&amp; !SystemArchitecture.inWebLayer()
+      : <span class="tok-str">"Only the UI layer is allowed to access itself"</span>;
+    <span class="tok-cm">// ... 中间两条类似规则，见随书源码</span>
+}</code></pre>
+  </div>
+  <p>
+    这里的关键技巧是把"什么是某一层"抽成一组可复用的切点（<code class="inline">SystemArchitecture</code>），
+    真正报错的规则切面只负责组合这些切点。这样以后重构包名，只需要改一个地方。
+  </p>
+
+  <h3>2.2 更多例子：封装性 & 工厂模式</h3>
+  <p>本章还展示了几个常见的"用 Java 访问修饰符做不到，但用 AspectJ 能做到"的规则：</p>
+  <table class="tbl">
+    <tr><th>规则</th><th>怎么写</th></tr>
+    <tr><td>不要把字段设为 <code class="inline">public</code></td><td><code class="inline">declare warning : get(public !final * *) || set(public !final * *) : "..."</code></td></tr>
+    <tr><td>只允许 <code class="inline">OrderService</code> 修改 <code class="inline">Order</code></td><td><code class="inline">declare error : call(* Order.add*(..)) &amp;&amp; !within(OrderService+) : "..."</code></td></tr>
+    <tr><td>只允许工厂类创建 <code class="inline">Product</code></td><td>在 <code class="inline">ProductFactory</code> 内嵌一个 <code class="inline">static aspect</code>，规则是 <code class="inline">call(Product.new(..)) &amp;&amp; !within(ProductFactory+)</code></td></tr>
+  </table>
+  <p>
+    最后一条特别有意思：它相当于给 Java 补上了 C++ 里的 "friend" 语义——只有指定的类能调用某个构造方法，
+    普通的 <code class="inline">public</code>/<code class="inline">private</code> 做不到这种"只对某个类开放"的精细控制。
+  </p>
+
+  <div class="callout warn">
+    <span class="label">⚠️ Spring AOP 做不到这些</span>
+    <p>
+      因为这些例子都依赖 <code class="inline">call()</code> 切点或 <code class="inline">declare error</code>（编译期语法），
+      而 Spring AOP 是运行时动态代理，既不能拦截 <code class="inline">new</code> 构造调用，也不产生编译错误。
+      这类"设计规则"类的强制，必须用真正的 AspectJ 织入（编译期或加载期）。
+    </p>
+  </div>
+
+  <h2>3. 编译期检查的局限 & 运行时检查补位</h2>
+  <p><code class="inline">declare error</code> 虽然强大，但只能用"静态可判定"的切点，因此做不到：</p>
+  <ul>
+    <li>依赖运行时信息的判断（比如 <code class="inline">this()</code>、<code class="inline">if()</code>、<code class="inline">cflow()</code> 不能用在 declare 里）</li>
+    <li>检测"缺少什么"，比如空的 <code class="inline">catch</code> 块——切点只能匹配存在的连接点</li>
+    <li>跨多个连接点的关联检查，比如"加的锁有没有对应释放"</li>
+    <li>风格类问题，比如方法太长、没写注释</li>
+  </ul>
+  <p>
+    这些场景需要运行时通知（比如 <code class="inline">after() returning</code>）来补位。
+    书中给出一个例子：仓储方法不应该返回 <code class="inline">null</code> 集合，而应该返回空集合——这是运行时才能检测到的："方法真的返回了 null"这件事必须等它执行完才知道。
+  </p>
+
+  <div class="code">
+    <div class="file">现代写法：用 @AspectJ 注解检测 Repository 返回 null 集合</div>
+    <pre><code><span class="tok-ann">@Aspect</span>
+<span class="tok-kw">public class</span> RepositoryNullReturnDetector {
+    <span class="tok-kw">private static final</span> Logger log =
+        LoggerFactory.getLogger(RepositoryNullReturnDetector.<span class="tok-kw">class</span>); <span class="tok-cm">// SLF4J，取代书中的 Log4j 1.x</span>
+
+    <span class="tok-ann">@AfterReturning</span>(
+        pointcut = <span class="tok-str">"execution((java.util.Map+ || java.util.Collection+) *..*Repository.*(..))"</span>,
+        returning = <span class="tok-str">"result"</span>)
+    <span class="tok-kw">public void</span> checkNullReturn(Object result) {
+        <span class="tok-kw">if</span> (result == <span class="tok-kw">null</span>) {
+            log.error(<span class="tok-str">"Repository 方法返回了 null 集合，应返回空集合"</span>, <span class="tok-kw">new</span> Throwable());
+        }
+    }
+}</code></pre>
+  </div>
+
+  <h2>4. 和静态分析工具（Checkstyle / PMD / ArchUnit）比，该用哪个？</h2>
+  <div class="versus">
+    <div class="col old">
+      <div class="tag">代码分析工具</div>
+      <ul>
+        <li>能跨方法/跨类分析（比如判断锁有没有配对释放）</li>
+        <li>能检查源码层面的东西：命名规范、注释缺失、代码风格</li>
+        <li>大多在编译期或 IDE 里就能跑，反馈快</li>
+        <li>没有运行时上下文——检测不了"当前调用线程是谁"这类信息</li>
+      </ul>
+    </div>
+    <div class="col new">
+      <div class="tag">AspectJ 规则强制</div>
+      <ul>
+        <li>能表达连接点级别的精确规则（谁在调用谁、在哪个控制流里）</li>
+        <li>能在运行时用真实上下文做判断（当前线程、当前登录用户……）</li>
+        <li>写法通常只需要几行切点，很适合项目专属规则</li>
+        <li>做不到"缺失检测"和风格类检查</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout modern">
+    <span class="label">🔧 现代补充：ArchUnit</span>
+    <p>
+      本章写作时（2010 年前后），Checkstyle/PMD/FindBugs 是主流的静态分析工具。今天做"架构分层检查"，
+      很多团队会优先选择 <b>ArchUnit</b>——它是一个基于 JUnit 5 的库，用普通 Java 代码写规则
+      （比如 <code class="inline">classes().that().resideInAPackage("..service..").should().onlyBeAccessed().byAnyPackage("..web..")</code>），
+      跑在 CI 的单元测试阶段，不需要在主构建里引入 AspectJ 织入器，学习成本更低。<br><br>
+      但 ArchUnit 是"事后扫描字节码"，没法像 <code class="inline">declare error</code> 那样在编译的一瞬间把光标定位到违规那一行，
+      也无法结合运行时上下文（比如 cflow）做判断。两者并不互斥：架构分层这种"结构性"规则，
+      ArchUnit 通常够用又轻量；需要连接点精度或运行时判断的规则（工厂强制、字段访问限制、线程安全策略），
+      AspectJ 仍然是更合适的工具。
+    </p>
+  </div>
+
+  <div class="exercise">
+    <span class="label">✏️ 动手练习</span>
+    <p>
+      打开 <code class="inline">ch11/workspace/Section11.1AOPBasedPolicyEnforcement</code>，
+      故意在 <code class="inline">ajia.web</code> 包里写一个直接 <code class="inline">DriverManager.getConnection(...)</code> 的方法，
+      用 Maven + <code class="inline">dev.aspectj:aspectj-maven-plugin</code> 编译，观察编译错误信息里精确指出的违规行号。
+      然后再尝试用 ArchUnit 写一条等价的分层规则，比较两种方式报错的时机和信息量。
+    </p>
+  </div>
+
+  <h2>小结 &amp; 自测</h2>
+  <ul class="quiz">
+    <li class="q">declare error 和普通的运行时异常检查有什么本质区别？
+      <div class="a">declare error 是编译期机制：只要代码里存在匹配的连接点，编译器就直接报错，代码根本编译不过，不需要真正跑起来触发那条路径；运行时检查则必须等代码执行到那一行才能发现问题。</div>
+    </li>
+    <li class="q">为什么 declare error 不能用 this()、if()、cflow() 这类切点？
+      <div class="a">因为编译期还没有"运行中的对象/调用栈"，只能用能在源码静态分析阶段就确定下来的切点（比如 call、within、get/set），这类切点叫"静态可判定切点"。</div>
+    </li>
+    <li class="q">为什么 Spring AOP 无法实现"只有工厂类能创建 Product"这条规则？
+      <div class="a">因为这条规则需要拦截构造方法调用（call(Product.new(..))），而 Spring AOP 基于运行时动态代理，只能围绕已经存在的 Bean 方法调用做增强，不能拦截 new 关键字。</div>
+    </li>
+    <li class="q">今天做架构分层检查，ArchUnit 和 AspectJ 的 declare error 该怎么选？
+      <div class="a">纯粹的包依赖方向检查，ArchUnit 更轻量、不需要引入织入器，跑在单元测试里就行；如果需要连接点级别的精确匹配或运行时上下文（比如结合当前线程、调用链判断），仍然需要 AspectJ。</div>
+    </li>
+    <li class="q">为什么"不返回 null 集合"这条规则要在运行时而不是编译期检查？
+      <div class="a">因为"方法实际返回了什么值"是运行时才知道的信息，编译期只能看到方法签名和代码结构，看不出某次具体调用的返回值是不是 null。</div>
+    </li>
+  </ul>
+
+  <div class="pagenav">
+    <a class="prev" href="ch10.html"><span class="lbl">上一章</span>第 10 章：监控类切面</a>
+    <a class="next" href="ch12.html"><span class="lbl">下一章</span>第 12 章：切面设计模式</a>
+  </div>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

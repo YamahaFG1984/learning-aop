@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>附录 B/C：构建工具 Ant vs. Maven | AspectJ in Action 图解笔记</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar">
+  <a href="index.html">&larr; 全部章节</a>
+  <span>AspectJ in Action · 图解笔记</span>
+</div>
+<div class="page">
+
+  <span class="kicker">APPENDIX B / C</span>
+  <h1>构建工具：Ant vs. Maven</h1>
+  <p class="subtitle">一句话概括：书里用 Ant 和 Maven 各讲了一遍同样的三件事——织入自己的源码、打包一个切面库、织入别人编译好的 jar。Ant 已经过时，今天直接看 Maven（或 Gradle）部分就够了。</p>
+
+  <div class="covers">
+    <h4>本章你将学到</h4>
+    <ul>
+      <li>AspectJ 项目里三种最常见的构建任务是什么</li>
+      <li>为什么 Ant 部分可以跳过，现代项目怎么用 Maven / Gradle 完成同样的事</li>
+      <li>现代 AspectJ Maven/Gradle 插件该怎么配置</li>
+    </ul>
+  </div>
+
+  <h2>1. 为什么这两个附录要一起看</h2>
+  <p>
+    附录 B 用 Ant、附录 C 用 Maven，做的是<strong>完全相同的三件事</strong>。
+    2010 年前后 Ant 和 Maven 在企业里还是并存的两大主流构建工具，所以书里两种都讲了一遍。
+    但今天几乎不会再有新项目选择 Ant——Maven 和 Gradle 早已是绝对主流。
+    所以这一页把附录 B 的内容压缩成一句话背景知识，把篇幅留给 Maven / Gradle 的现代写法。
+  </p>
+
+  <div class="callout tip">
+    <span class="label">💡 Ant 部分要不要读？</span>
+    <p>
+      不需要。Ant 版本的 <code class="inline">build.xml</code> 用 <code class="inline">&lt;iajc&gt;</code> 任务手动指定
+      <code class="inline">aspectjtools.jar</code> 路径、手动拼 classpath，属于“看得懂但没必要再学”的历史写法。
+      仓库里 <code class="inline">appendixBandC/workspace/*/build.xml</code> 保留了原始示例，感兴趣可以翻一翻。
+    </p>
+  </div>
+
+  <h2>2. 三种构建任务，一图对比</h2>
+  <div class="diagram">
+    <svg viewBox="0 0 640 280" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow-appbc-1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="currentColor"/>
+        </marker>
+      </defs>
+
+      <text x="20" y="30" font-size="13" font-weight="bold">① 织入自己的源码</text>
+      <rect class="box" x="20" y="45" width="140" height="40" rx="6"/>
+      <text x="90" y="70" text-anchor="middle" font-size="12">.java + .aj 源码</text>
+      <path class="arrow" d="M160,65 L215,65" marker-end="url(#arrow-appbc-1)"/>
+      <rect class="accentbox" x="220" y="45" width="140" height="40" rx="6"/>
+      <text x="290" y="70" text-anchor="middle" font-size="12">编译期织入</text>
+      <path class="arrow" d="M360,65 L415,65" marker-end="url(#arrow-appbc-1)"/>
+      <rect class="box" x="420" y="45" width="140" height="40" rx="6"/>
+      <text x="490" y="70" text-anchor="middle" font-size="12">已织入的 .class</text>
+
+      <text x="20" y="130" font-size="13" font-weight="bold">② 打包一个可复用的切面库</text>
+      <rect class="box" x="20" y="145" width="140" height="40" rx="6"/>
+      <text x="90" y="170" text-anchor="middle" font-size="12">只有 .aj 切面</text>
+      <path class="arrow" d="M160,165 L215,165" marker-end="url(#arrow-appbc-1)"/>
+      <rect class="accentbox" x="220" y="145" width="140" height="40" rx="6"/>
+      <text x="290" y="170" text-anchor="middle" font-size="12">编译 + 打包</text>
+      <path class="arrow" d="M360,165 L415,165" marker-end="url(#arrow-appbc-1)"/>
+      <rect class="box" x="420" y="145" width="140" height="40" rx="6"/>
+      <text x="490" y="170" text-anchor="middle" font-size="12">aspect-library.jar</text>
+
+      <text x="20" y="230" font-size="13" font-weight="bold">③ 织入别人编译好的 jar（二进制织入）</text>
+      <rect class="box" x="20" y="245" width="140" height="30" rx="6"/>
+      <text x="90" y="265" text-anchor="middle" font-size="11">app.jar（无切面）</text>
+      <rect class="box" x="20" y="245" width="0" height="0"/>
+      <rect class="accentbox" x="220" y="245" width="140" height="30" rx="6"/>
+      <text x="290" y="265" text-anchor="middle" font-size="11">+ aspect-library.jar</text>
+      <path class="arrow" d="M160,260 L215,260" marker-end="url(#arrow-appbc-1)"/>
+      <path class="arrow" d="M360,260 L415,260" marker-end="url(#arrow-appbc-1)"/>
+      <rect class="box" x="420" y="245" width="140" height="30" rx="6"/>
+      <text x="490" y="265" text-anchor="middle" font-size="11">woven-app.jar</text>
+    </svg>
+    <div class="caption">图 B/C-1　三种常见构建任务：编译期织入自己的代码 / 打包切面库 / 织入别人的二进制</div>
+  </div>
+
+  <h2>3. 用现代 Maven 做「编译期织入自己的源码」</h2>
+  <p>
+    书中用的是 <code class="inline">org.codehaus.mojo:aspectj-maven-plugin</code>，这个插件早已多年未更新。
+    社区接手维护的现代替代品是 <code class="inline">dev.aspectj:aspectj-maven-plugin</code>，配置方式几乎一样，但持续跟进新版 AspectJ 和新版 Java。
+  </p>
+  <div class="code">
+    <div class="file">pom.xml（编译期织入，Java 17）</div>
+    <pre><code>&lt;dependencies&gt;
+  &lt;dependency&gt;
+    &lt;groupId&gt;org.aspectj&lt;/groupId&gt;
+    &lt;artifactId&gt;aspectjrt&lt;/artifactId&gt;
+    &lt;version&gt;1.9.22&lt;/version&gt;
+  &lt;/dependency&gt;
+&lt;/dependencies&gt;
+
+&lt;build&gt;
+  &lt;plugins&gt;
+    &lt;plugin&gt;
+      &lt;groupId&gt;dev.aspectj&lt;/groupId&gt;
+      &lt;artifactId&gt;aspectj-maven-plugin&lt;/artifactId&gt;
+      &lt;version&gt;1.14&lt;/version&gt;
+      &lt;configuration&gt;
+        &lt;complianceLevel&gt;17&lt;/complianceLevel&gt;
+        &lt;source&gt;17&lt;/source&gt;
+        &lt;target&gt;17&lt;/target&gt;
+      &lt;/configuration&gt;
+      &lt;executions&gt;
+        &lt;execution&gt;
+          &lt;goals&gt;
+            &lt;goal&gt;compile&lt;/goal&gt;
+            &lt;goal&gt;test-compile&lt;/goal&gt;
+          &lt;/goals&gt;
+        &lt;/execution&gt;
+      &lt;/executions&gt;
+    &lt;/plugin&gt;
+  &lt;/plugins&gt;
+&lt;/build&gt;</code></pre>
+  </div>
+  <p>用 Gradle 的话，等价写法是 <code class="inline">io.freefair.aspectj</code> 插件：</p>
+  <div class="code">
+    <div class="file">build.gradle（编译期织入）</div>
+    <pre><code>plugins {
+    id 'java'
+    id 'io.freefair.aspectj.post-compile-weaving' version '8.10'
+}
+
+dependencies {
+    aspect 'org.aspectj:aspectjrt:1.9.22'
+    implementation 'org.aspectj:aspectjrt:1.9.22'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+}</code></pre>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">⚠️ 版本提醒</span>
+    <p>
+      AspectJ、<code class="inline">dev.aspectj:aspectj-maven-plugin</code> 和 <code class="inline">io.freefair.aspectj</code>
+      的具体版本号请以 <a href="https://central.sonatype.com/" target="_blank" rel="noopener">Maven Central</a> 和
+      <a href="https://plugins.gradle.org/" target="_blank" rel="noopener">Gradle Plugin Portal</a> 上的最新版本为准，
+      不要把本页里的数字当作永远最新的版本。
+    </p>
+  </div>
+
+  <h2>4. 打包切面库 &amp; 二进制织入，思路不变</h2>
+  <p>
+    书中「打包一个可复用的切面库」和「把切面库织入别人的 jar」这两件事，在现代插件里对应的是同一套配置的两个变体：
+  </p>
+  <ul>
+    <li>
+      <strong>切面库</strong>：一个只包含 <code class="inline">@Aspect</code> 切面、没有具体业务类的普通模块，
+      正常 <code class="inline">mvn install</code> 打成 jar，发布到仓库供别人依赖即可——不需要特殊配置。
+    </li>
+    <li>
+      <strong>二进制织入</strong>：在使用方项目的 <code class="inline">aspectj-maven-plugin</code> 配置里，
+      用 <code class="inline">&lt;weaveDependencies&gt;</code> 指定要被织入的 jar（对应旧版 <code class="inline">-inpath</code>），
+      用 <code class="inline">&lt;aspectLibraries&gt;</code> 指定切面库（对应旧版 <code class="inline">-aspectpath</code>）——
+      这部分的配置结构书中和现代版本几乎一致，仓库里
+      <code class="inline">appendixBandC/workspace/SectionB3andC3_2BinaryWeaving/pom.xml</code> 就是一个可以直接参考的例子。
+    </li>
+  </ul>
+
+  <div class="exercise">
+    <span class="label">✏️ 动手练习</span>
+    <p>
+      打开仓库里 <code class="inline">appendixBandC/workspace/SectionB1andC1SourceCodeBuildTimeWeaving/pom.xml</code>，
+      对比它和上面「编译期织入」代码块的差异（主要是 <code class="inline">groupId</code> 从
+      <code class="inline">org.codehaus.mojo</code> 换成了 <code class="inline">dev.aspectj</code>，
+      <code class="inline">source</code>/<code class="inline">target</code> 从 <code class="inline">1.5</code> 升级到 <code class="inline">17</code>），
+      试着把这个 pom.xml 改成现代写法，本地跑一次 <code class="inline">mvn compile</code> 看能否成功织入。
+    </p>
+  </div>
+
+  <h2>小结 &amp; 自测</h2>
+  <ul class="quiz">
+    <li class="q">附录 B 和附录 C 讲的是同一件事还是不同的事？
+      <div class="a">同一件事——源码级编译期织入、打包切面库、二进制织入这三个任务，只是分别用 Ant（附录 B）和 Maven（附录 C）演示了一遍，因为当时两种构建工具都很主流。</div>
+    </li>
+    <li class="q">今天还需要学 Ant 部分吗？
+      <div class="a">不需要。现代 Java 项目基本都用 Maven 或 Gradle，Ant 属于可以跳过的历史知识，了解“它曾经存在过”即可。</div>
+    </li>
+    <li class="q">书中的 <code class="inline">org.codehaus.mojo:aspectj-maven-plugin</code> 现在还推荐用吗？
+      <div class="a">不推荐，该插件已多年缺乏更新。社区维护的现代替代是 <code class="inline">dev.aspectj:aspectj-maven-plugin</code>，配置方式高度相似但持续跟进新版 AspectJ 和 Java。</div>
+    </li>
+    <li class="q">"weaveDependencies" 和 "aspectLibraries" 分别对应 ajc 编译器的哪两个旧选项？
+      <div class="a">分别对应 <code class="inline">-inpath</code>（指定要被织入的已编译代码/jar）和 <code class="inline">-aspectpath</code>（指定作为切面库使用的 jar）。</div>
+    </li>
+  </ul>
+
+  <div class="pagenav">
+    <a class="prev" href="appendixA.html"><span class="lbl">上一章</span>附录 A：搭建示例工程</a>
+    <a class="next" href="index.html"><span class="lbl">返回首页</span>全部章节 · 完成阅读 🎉</a>
+  </div>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

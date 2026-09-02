@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第 10 章：监控类切面 | AspectJ in Action 图解笔记</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar">
+  <a href="index.html">&larr; 全部章节</a>
+  <span>AspectJ in Action · 图解笔记</span>
+</div>
+<div class="page">
+
+  <span class="kicker">CHAPTER 10</span>
+  <h1>监控类切面</h1>
+  <p class="subtitle">一句话概括本章：日志追踪、异常记录、性能计时——这些"到处都要抄一遍"的代码，用一个切面写一次就够了。</p>
+
+  <div class="covers">
+    <h4>本章你将学到</h4>
+    <ul>
+      <li>方法调用链追踪（entry/exit tracing），以及如何用缩进体现调用深度</li>
+      <li>用 <code class="inline">around</code> 通知统一实现异常监控和性能计时</li>
+      <li>NDC/MDC 上下文日志的作用，以及它在现代 Java 生态里的替代品</li>
+    </ul>
+  </div>
+
+  <h2>1. 问题：日志代码"长得一模一样"，却散落在每个方法里</h2>
+  <p>
+    如果你写过企业应用，大概率见过这种代码：每个 Service 方法开头一句 <code class="inline">logger.info("Entering xxx")</code>，
+    结尾再来一句 <code class="inline">logger.info("Exiting xxx")</code>，性能敏感的地方再包一层计时。
+    这些代码逻辑完全相同，只是方法名不同——典型的"横切关注点"。
+  </p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 640 260" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow-ch10-1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <text x="160" y="24" text-anchor="middle" font-size="13" font-weight="700">改造前：日志代码散落各处</text>
+      <rect class="oldbox" x="20" y="40" width="280" height="45" rx="8"/>
+      <text x="160" y="66" text-anchor="middle" font-size="12">addProduct() { log(...); ... }</text>
+      <rect class="oldbox" x="20" y="95" width="280" height="45" rx="8"/>
+      <text x="160" y="121" text-anchor="middle" font-size="12">removeProduct() { log(...); ... }</text>
+      <rect class="oldbox" x="20" y="150" width="280" height="45" rx="8"/>
+      <text x="160" y="176" text-anchor="middle" font-size="12">checkStock() { log(...); ... }</text>
+
+      <text x="480" y="24" text-anchor="middle" font-size="13" font-weight="700">改造后：一个切面统一处理</text>
+      <rect class="newbox" x="340" y="40" width="280" height="45" rx="8"/>
+      <text x="480" y="66" text-anchor="middle" font-size="12">addProduct() { ... }（干净）</text>
+      <rect class="newbox" x="340" y="95" width="280" height="45" rx="8"/>
+      <text x="480" y="121" text-anchor="middle" font-size="12">removeProduct() { ... }（干净）</text>
+      <rect class="accentbox" x="340" y="160" width="280" height="60" rx="8"/>
+      <text x="480" y="184" text-anchor="middle" font-size="12" font-weight="700">TraceAspect</text>
+      <text x="480" y="202" text-anchor="middle" font-size="11" class="dim">统一负责所有方法的日志</text>
+
+      <path class="arrow-accent" d="M480,160 L480,140" marker-end="url(#arrow-ch10-1)"/>
+    </svg>
+    <div class="caption">图 10-1　把重复的追踪/日志代码从各个业务方法中"抽出来"，集中到一个切面</div>
+  </div>
+
+  <h2>2. 方法调用链追踪：用缩进体现调用深度</h2>
+  <p>
+    最基础的追踪切面只需要在方法进入/退出时打印一行日志。但如果 A 调 B、B 又调 C，日志全部堆在一起会很难看出层级关系。
+    书中的做法很巧妙：用 Log4j 的 <code class="inline">NDC</code>（Nested Diagnostic Context，嵌套诊断上下文）在每层调用时
+    <code class="inline">push</code> 一个空格，退出时 <code class="inline">pop</code> 掉——这样每深一层调用，日志就自动多一个缩进。
+  </p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 640 260" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow-ch10-2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <rect class="box" x="20" y="20" width="600" height="60" rx="8"/>
+      <text x="40" y="45" font-size="12">A.serviceMethod()</text>
+      <text x="40" y="64" font-size="11" class="dim">NDC 深度 = 1</text>
+      <rect class="box" x="60" y="90" width="520" height="60" rx="8" fill="var(--accent-dim)"/>
+      <text x="80" y="115" font-size="12">→ B.helperMethod()</text>
+      <text x="80" y="134" font-size="11" class="dim">NDC 深度 = 2（多一层缩进）</text>
+      <rect class="box" x="100" y="160" width="440" height="60" rx="8" fill="var(--bg-code)"/>
+      <text x="120" y="185" font-size="12">→ → C.repositoryCall()</text>
+      <text x="120" y="204" font-size="11" class="dim">NDC 深度 = 3（再多一层缩进）</text>
+      <text x="20" y="240" font-size="12" class="dim">控制台输出效果：Entering A → " Entering B" → "  Entering C"</text>
+    </svg>
+    <div class="caption">图 10-2　每进入一层方法调用就 push 一次缩进，退出时 pop 掉，日志天然呈现调用树形结构</div>
+  </div>
+
+  <p>对应仓库 <code class="inline">ch10/workspace/Section10.4.2SharingTracingAspect</code> 里的可复用缩进切面：</p>
+  <div class="code">
+    <div class="file">IndentationTraceAspect.aj（书中原版，Log4j 1.x + AspectJ 原生语法）</div>
+    <pre><code><span class="tok-kw">public abstract aspect</span> IndentationTraceAspect {
+    <span class="tok-kw">private</span> Logger logger = Logger.getLogger(IndentationTraceAspect.<span class="tok-kw">class</span>);
+
+    <span class="tok-kw">public abstract pointcut</span> traced();
+
+    <span class="tok-kw">before</span>() : traced() {
+        Signature sig = thisJoinPointStaticPart.getSignature();
+        logger.log(Level.INFO, <span class="tok-str">"Entering ["</span> + sig.toShortString() + <span class="tok-str">"]"</span>);
+        NDC.push(<span class="tok-str">" "</span>); <span class="tok-cm">// 每进一层，缩进 +1</span>
+    }
+
+    <span class="tok-kw">after</span>() : traced() {
+        NDC.pop(); <span class="tok-cm">// 退出时把缩进弹回去</span>
+    }
+}</code></pre>
+  </div>
+
+  <div class="versus">
+    <div class="col old">
+      <div class="tag">书中写法（已过时）</div>
+      <ul>
+        <li>Log4j 1.x：<code class="inline">org.apache.log4j.Logger</code> / <code class="inline">NDC</code></li>
+        <li>AspectJ 原生 <code class="inline">.aj</code> 语法（<code class="inline">abstract aspect</code> + <code class="inline">abstract pointcut</code>）</li>
+      </ul>
+    </div>
+    <div class="col new">
+      <div class="tag">推荐的现代写法</div>
+      <ul>
+        <li>SLF4J + Logback，<code class="inline">org.slf4j.MDC</code> 替代 NDC（键值对形式，比栈式 NDC 更灵活）</li>
+        <li>@AspectJ 注解语法，抽象切面用 <code class="inline">@Aspect abstract class</code></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="code">
+    <div class="file">IndentationTraceAspect.java（现代化：SLF4J + MDC + @AspectJ 语法）</div>
+    <pre><code><span class="tok-ann">@Aspect</span>
+<span class="tok-kw">public abstract class</span> IndentationTraceAspect {
+    <span class="tok-kw">private static final</span> Logger log = LoggerFactory.getLogger(IndentationTraceAspect.<span class="tok-kw">class</span>);
+    <span class="tok-kw">private static final</span> ThreadLocal&lt;Integer&gt; DEPTH = ThreadLocal.withInitial(() -&gt; 0);
+
+    <span class="tok-ann">@Pointcut</span>
+    <span class="tok-kw">public abstract void</span> traced();
+
+    <span class="tok-ann">@Before</span>(<span class="tok-str">"traced()"</span>)
+    <span class="tok-kw">public void</span> before(JoinPoint jp) {
+        <span class="tok-kw">int</span> depth = DEPTH.get();
+        MDC.put(<span class="tok-str">"indent"</span>, <span class="tok-str">"  "</span>.repeat(depth)); <span class="tok-cm">// MDC 放到日志 pattern 的 %X{indent} 里</span>
+        log.info(<span class="tok-str">"Entering [{}]"</span>, jp.getSignature().toShortString());
+        DEPTH.set(depth + 1);
+    }
+
+    <span class="tok-ann">@After</span>(<span class="tok-str">"traced()"</span>)
+    <span class="tok-kw">public void</span> after() {
+        DEPTH.set(DEPTH.get() - 1);
+    }
+}</code></pre>
+  </div>
+
+  <div class="callout modern">
+    <span class="label">🔧 现代生态里，这一章的活谁在干？</span>
+    <p>
+      在单体应用里，AspectJ + SLF4J/MDC 依然是给日志加"结构化上下文"最干净的办法——业务代码里完全看不到日志痕迹。
+      但如果你的系统是<strong>微服务</strong>，跨服务的调用链追踪现在通常交给 <strong>Micrometer Tracing + OpenTelemetry</strong>
+      这类分布式追踪方案（它们会自动传播 <code class="inline">traceId</code>/<code class="inline">spanId</code>，跨进程也能串起调用链，
+      这是本章手写的 NDC 缩进方案做不到的）。切面在这里的角色变成了：<em>把 traceId 之类的上下文塞进业务日志</em>，
+      而不是自己发明一套追踪机制。
+    </p>
+  </div>
+
+  <h2>3. 性能监控：用 <code class="inline">around</code> 通知量时间</h2>
+  <p>
+    追踪解决的是"发生了什么"，性能监控解决的是"花了多久"。因为要同时拿到方法执行前后的时间戳，天然要用能包住整个方法执行过程的
+    <code class="inline">around</code> 通知（见仓库 <code class="inline">ch10/workspace/Section10.8PerformanceMonitoring</code>）：
+  </p>
+  <div class="code">
+    <div class="file">AbstractPerformanceMonitoringAspect.java（书中原版逻辑，现代化为 SLF4J）</div>
+    <pre><code><span class="tok-ann">@Aspect</span>
+<span class="tok-kw">public abstract class</span> AbstractPerformanceMonitoringAspect {
+    <span class="tok-kw">private static final</span> Logger log = LoggerFactory.getLogger(AbstractPerformanceMonitoringAspect.<span class="tok-kw">class</span>);
+
+    <span class="tok-ann">@Pointcut</span>
+    <span class="tok-kw">public abstract void</span> monitoredOp();
+
+    <span class="tok-ann">@Around</span>(<span class="tok-str">"monitoredOp()"</span>)
+    <span class="tok-kw">public</span> Object monitor(ProceedingJoinPoint pjp) <span class="tok-kw">throws</span> Throwable {
+        <span class="tok-kw">long</span> start = System.nanoTime();
+        <span class="tok-kw">try</span> {
+            <span class="tok-kw">return</span> pjp.proceed(); <span class="tok-cm">// 真正执行原方法</span>
+        } <span class="tok-kw">finally</span> {
+            <span class="tok-kw">long</span> elapsed = System.nanoTime() - start;
+            log.info(<span class="tok-str">"{} took {} ns"</span>, pjp.getSignature().toShortString(), elapsed);
+        }
+    }
+}</code></pre>
+  </div>
+  <div class="callout tip">
+    <span class="label">💡 为什么用 <code>finally</code></span>
+    <p>
+      把计时和日志放进 <code class="inline">finally</code> 块，无论目标方法正常返回还是抛异常，耗时都会被记录下来——
+      这正是 <code class="inline">around</code> 通知比 <code class="inline">before</code> + <code class="inline">after returning</code> 组合更适合计时场景的原因：
+      它能拿到"进入"和"离开"（无论何种方式离开）之间完整的时间窗口。
+    </p>
+  </div>
+
+  <h2>4. 异常监控：把 try/catch 的"打印日志"部分抽走</h2>
+  <p>
+    很多项目里几乎每个方法都写着 <code class="inline">catch (Exception e) { logger.error(...); throw e; }</code>。
+    用 <code class="inline">@AfterThrowing</code> 通知可以把这段"记录异常"的逻辑收敛到一处，业务代码只需要专心处理业务异常，
+    不用再操心"打没打日志"。
+  </p>
+
+  <h2>小结 &amp; 自测</h2>
+  <ul class="quiz">
+    <li class="q">为什么追踪日志天然适合用切面实现，而不是每个方法手写？
+      <div class="a">因为追踪代码在所有方法里逻辑完全相同（都是"进入时打印+退出时打印"），是典型的横切关注点，用切面写一次即可应用到所有匹配的方法。</div>
+    </li>
+    <li class="q">缩进式调用链追踪的核心技巧是什么？
+      <div class="a">用 before 通知在每次进入方法时增加一层缩进（书中用 Log4j NDC.push，现代写法可以用线程本地的深度计数器配上 SLF4J MDC），after 通知里再把缩进减一层。</div>
+    </li>
+    <li class="q">性能监控为什么用 around 通知而不是 before/after？
+      <div class="a">因为需要同时拿到方法执行前后的时间戳来计算耗时，around 通知能包裹住整个方法执行过程，并且可以放在 finally 里保证异常时也能记录耗时。</div>
+    </li>
+    <li class="q">在分布式微服务场景下，本章的追踪思路有什么局限？
+      <div class="a">NDC/MDC 缩进只能反映单个进程内的调用层级，无法跨进程/跨服务传播；跨服务的调用链追踪需要 OpenTelemetry / Micrometer Tracing 这类分布式追踪方案。</div>
+    </li>
+  </ul>
+
+  <div class="pagenav">
+    <a class="prev" href="ch09.html"><span class="lbl">上一章</span>第 9 章：与 Spring 集成</a>
+    <a class="next" href="ch11.html"><span class="lbl">下一章</span>第 11 章：用切面强制执行规范</a>
+  </div>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

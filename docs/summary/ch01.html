@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第 1 章：发现 AOP | AspectJ in Action 图解笔记</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar">
+  <a href="index.html">&larr; 全部章节</a>
+  <span>AspectJ in Action · 图解笔记</span>
+</div>
+<div class="page">
+
+  <span class="kicker">CHAPTER 01</span>
+  <h1>发现 AOP</h1>
+  <p class="subtitle">一句话概括本章：面向对象编程（OOP）能把“业务功能”模块化得很好，但对日志、权限、事务这类“横切关注点”无能为力——AOP 就是为了解决这个缺口而生的。</p>
+
+  <div class="covers">
+    <h4>本章你将学到</h4>
+    <ul>
+      <li>什么是“横切关注点”（crosscutting concern），它为什么是 OOP 的老大难问题</li>
+      <li>“代码纠缠”（tangling）与“代码分散”（scattering）这两个症状怎么识别</li>
+      <li>AOP 引入的新武器：切面（aspect）、连接点（join point）、切点（pointcut）、通知（advice）</li>
+      <li>AOP 不是银弹：它的成本、收益，以及什么时候该用</li>
+    </ul>
+  </div>
+
+  <h2>1. 一个你多半已经踩过的坑</h2>
+  <p>
+    如果你写过任何一个稍微像样的后端服务，大概率写过这样的代码：某个 <code class="inline">OrderService</code>
+    方法里，业务逻辑只有五行，但方法头尾却挂着一堆“杂事”——记录日志、检查权限、开启事务、捕获异常上报监控。
+    业务逻辑被这些“杂事”前后包夹，一个方法看起来像三明治。
+  </p>
+  <p>
+    书里把系统的功能拆成两类：<strong>核心关注点</strong>（core concern，比如“下单”“查库存”这些业务本身）和
+    <strong>横切关注点</strong>（crosscutting concern，比如日志、安全、事务、缓存、性能监控）。核心关注点很适合用类和接口来模块化——
+    <code class="inline">OrderService</code> 就该只管下单。但横切关注点很“不讲武德”：它不属于任何一个模块，却同时出现在几乎所有模块里。
+  </p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 680 300" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow-ch01-1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <text x="170" y="24" text-anchor="middle" font-size="13" font-weight="700">传统 OOP：各自为战</text>
+      <rect class="box" x="30" y="40" width="280" height="46" rx="8"/>
+      <text x="170" y="68" text-anchor="middle" font-size="12.5">OrderService（日志+权限+事务+下单）</text>
+      <rect class="box" x="30" y="96" width="280" height="46" rx="8"/>
+      <text x="170" y="124" text-anchor="middle" font-size="12.5">PaymentService（日志+权限+事务+扣款）</text>
+      <rect class="box" x="30" y="152" width="280" height="46" rx="8"/>
+      <text x="170" y="180" text-anchor="middle" font-size="12.5">InventoryService（日志+权限+事务+扣库存）</text>
+      <text x="170" y="220" text-anchor="middle" class="dim" font-size="12">同样的日志/权限/事务代码，抄了三遍</text>
+
+      <text x="520" y="24" text-anchor="middle" font-size="13" font-weight="700">AOP：横切关注点独立出来</text>
+      <rect class="box" x="400" y="70" width="130" height="34" rx="8"/>
+      <text x="465" y="92" text-anchor="middle" font-size="12">OrderService</text>
+      <rect class="box" x="400" y="112" width="130" height="34" rx="8"/>
+      <text x="465" y="134" text-anchor="middle" font-size="12">PaymentService</text>
+      <rect class="box" x="400" y="154" width="130" height="34" rx="8"/>
+      <text x="465" y="176" text-anchor="middle" font-size="12">InventoryService</text>
+      <rect class="accentbox" x="570" y="105" width="100" height="60" rx="8"/>
+      <text x="620" y="130" text-anchor="middle" font-size="11.5">日志/权限</text>
+      <text x="620" y="146" text-anchor="middle" font-size="11.5">/事务切面</text>
+      <path class="arrow-accent" d="M530,87 C555,95 555,110 572,120" marker-end="url(#arrow-ch01-1)"/>
+      <path class="arrow-accent" d="M530,129 C550,129 552,132 568,134" marker-end="url(#arrow-ch01-1)"/>
+      <path class="arrow-accent" d="M530,171 C555,163 555,150 568,140" marker-end="url(#arrow-ch01-1)"/>
+      <text x="620" y="195" text-anchor="middle" class="dim" font-size="12">三处业务类只剩业务代码</text>
+    </svg>
+    <div class="caption">图 1-1　左：三个业务类里各自重复写日志/权限/事务代码（纠缠+分散）；右：AOP 把这些关注点抽到一个切面里，“织”回业务类</div>
+  </div>
+
+  <h2>2. 两个症状：代码纠缠 &amp; 代码分散</h2>
+  <p>书中用两个术语精确描述了这个坏味道：</p>
+  <ul>
+    <li><strong>代码纠缠（tangling）</strong>：一个方法内部，核心逻辑和日志/权限/事务代码绞在一起，你必须从一堆“杂事”里找到真正的业务逻辑。</li>
+    <li><strong>代码分散（scattering）</strong>：同一个关注点（比如“检查权限”）的实现代码，散落在几十个不同的类里。哪天权限校验逻辑要改，你得改几十个地方。</li>
+  </ul>
+  <div class="callout tip">
+    <span class="label">💡 类比：CSS 与 HTML</span>
+    <p>
+      没有 CSS 之前，HTML 标签上到处塞 <code class="inline">&lt;font color="red"&gt;</code>，内容和样式纠缠在一起，改个颜色要改一百个页面。
+      CSS 用“选择器 + 样式规则”把样式从内容里分离出来。<br>
+      AOP 做的是同一件事，只不过对象从“网页元素”换成了“程序里的方法调用”：<strong>切点（pointcut）就是选择器，通知（advice）就是样式规则</strong>。
+    </p>
+  </div>
+
+  <h2>3. AOP 的解法：把关注点“焊”回去</h2>
+  <p>
+    AOP 并不是说横切代码不用写了——认证逻辑总要有人实现。AOP 做的是把这些逻辑放进一个新的模块单元，叫
+    <strong>切面（aspect）</strong>，然后由一个叫<strong>织入器（weaver）</strong>的工具，在编译期、类加载期或运行期，
+    把切面“焊接”回业务代码要生效的地方。业务类本身完全不知道切面的存在。
+  </p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 640 220" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow-ch01-2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <rect class="box" x="40" y="130" width="200" height="60" rx="10"/>
+      <text x="140" y="165" text-anchor="middle" font-size="13">底图：业务逻辑</text>
+      <rect class="accentbox" x="90" y="90" width="200" height="60" rx="10" opacity="0.9"/>
+      <text x="190" y="125" text-anchor="middle" font-size="13">透明图层：日志切面</text>
+      <rect class="oldbox" x="140" y="50" width="200" height="60" rx="10" opacity="0.9"/>
+      <text x="240" y="85" text-anchor="middle" font-size="13">透明图层：权限切面</text>
+      <path class="arrow" d="M400,110 L480,110" marker-end="url(#arrow-ch01-2)"/>
+      <text x="440" y="98" text-anchor="middle" class="dim" font-size="11">织入</text>
+      <rect class="box" x="480" y="80" width="140" height="60" rx="10"/>
+      <text x="550" y="105" text-anchor="middle" font-size="12">最终运行的</text>
+      <text x="550" y="122" text-anchor="middle" font-size="12">程序</text>
+    </svg>
+    <div class="caption">图 1-2　类比 Photoshop 图层：业务逻辑是底图，每个切面是一张透明覆盖图，织入器负责把所有图层合并输出</div>
+  </div>
+
+  <p>要理解后面所有章节，先记住 AOP 世界里的四个核心词——第 2、3 章会逐一细讲，这里先建立直觉：</p>
+  <table class="tbl">
+    <tr><th>术语</th><th>直觉理解</th></tr>
+    <tr><td>连接点 join point</td><td>程序执行过程中“发生的事情”，例如某个方法被调用、某个异常被抛出</td></tr>
+    <tr><td>切点 pointcut</td><td>一条“查询语句”，从所有连接点里挑出你关心的那些（“所有 public 方法”“所有带 @Transactional 的方法”）</td></tr>
+    <tr><td>通知 advice</td><td>命中切点后要执行的代码——之前执行、之后执行，还是把原方法包起来执行</td></tr>
+    <tr><td>切面 aspect</td><td>把上面几样打包在一起的模块，相当于 AOP 世界里的“类”</td></tr>
+  </table>
+
+  <h2>4. 你其实已经在用 AOP 了</h2>
+  <p>书里在 2009 年举的例子是 EJB3 拦截器，放到今天，更贴近的例子是这些你可能天天在用的 Spring 特性——它们背后全部是同一套 AOP 模型：</p>
+  <div class="code">
+    <div class="file">日常代码里“隐形”的切面</div>
+    <pre><code><span class="tok-ann">@Transactional</span>
+<span class="tok-kw">public</span> <span class="tok-type">void</span> placeOrder(Order order) { ... }
+
+<span class="tok-ann">@PreAuthorize</span>(<span class="tok-str">"hasRole('ADMIN')"</span>)
+<span class="tok-kw">public</span> <span class="tok-type">void</span> deleteUser(Long id) { ... }
+
+<span class="tok-ann">@Cacheable</span>(<span class="tok-str">"products"</span>)
+<span class="tok-kw">public</span> Product findById(Long id) { ... }</code></pre>
+  </div>
+  <p>
+    这三行注解背后，Spring 分别用一个“事务切面”“安全切面”“缓存切面”，在方法执行前后悄悄插入了开事务/提交回滚、鉴权、读写缓存的逻辑——
+    你的 <code class="inline">placeOrder</code> 方法体里一行这些代码都不用写。等到第 9 章，你会看到 Spring 是怎么做到这一点的（提示：靠动态代理）。
+    另外像 Micrometer/OpenTelemetry 的自动埋点、日志框架的 MDC 追踪，本质上也是同一个思路。
+  </p>
+
+  <h2>5. AOP 不是免费的午餐</h2>
+  <p>书中很诚实地讨论了 AOP 的代价，这点在 2026 年依然成立：</p>
+  <div class="callout warn">
+    <span class="label">⚠️ 使用 AOP 前要知道的事</span>
+    <p>
+      1）学习曲线：切面代码不在调用现场，刚接触时你会看着一段代码却不知道背后发生了什么“魔法”；<br>
+      2）调试更绕：报错堆栈会经过代理类/织入生成的方法，需要适应；<br>
+      3）团队协作成本：滥用 AOP（尤其是过于宽泛的切点表达式）会让代码行为变得难以预测。<br>
+      好消息是：现代 IDE（IntelliJ IDEA 对 Spring AOP 有很好的“哪个切面生效了”提示）已经比 2009 年友好太多。
+    </p>
+  </div>
+  <p>
+    换来的收益也很实在：核心业务代码不再被“杂事”污染，改一个横切逻辑只需要改一个切面而不是几十个类，
+    新增一个横切需求（比如给某类接口加限流）往往可以“无侵入”地插入，不用动原有代码——这正好呼应了敏捷开发里的 YAGNI 原则。
+  </p>
+
+  <div class="exercise">
+    <span class="label">✏️ 动手练习（思考题，无需写代码）</span>
+    <p>
+      打开你现在参与的任意一个项目，随便挑一个 Service 类，数一数方法体里有多少行是「真正的业务逻辑」，
+      多少行是日志/权限/事务/异常处理这类横切代码。这个比例，就是 AOP 想帮你优化的地方。
+    </p>
+  </div>
+
+  <h2>小结 &amp; 自测</h2>
+  <ul class="quiz">
+    <li class="q">什么是“横切关注点”？举两个例子。
+      <div class="a">同时影响系统里多个不相关模块、无法被单一模块干净封装的功能，例如日志记录、权限校验、事务管理、缓存、性能监控。</div>
+    </li>
+    <li class="q">代码纠缠和代码分散有什么区别？
+      <div class="a">纠缠指“一个方法内部”核心逻辑和横切逻辑混在一起；分散指“同一个横切逻辑”的代码重复出现在很多个方法/类里。两者通常同时出现。</div>
+    </li>
+    <li class="q">AOP 中“织入”（weaving）是在做什么？
+      <div class="a">把切面里定义的横切逻辑，按照切点规则插入到业务代码要生效的具体位置，生成最终真正运行的程序（可以发生在编译期、类加载期或运行期）。</div>
+    </li>
+    <li class="q">Spring 的 <code class="inline">@Transactional</code> 和 AOP 有什么关系？
+      <div class="a">它是 AOP 思想在 Spring 里的一个具体应用：Spring 用一个内置的事务切面，在被 @Transactional 标注的方法执行前后自动插入开启事务、提交/回滚的逻辑。</div>
+    </li>
+    <li class="q">AOP 是不是“银弹”，用了就一定更好？
+      <div class="a">不是。它有学习成本和调试成本，切点写得过于宽泛还会让程序行为难以预测。应该在“横切逻辑确实分散在很多地方”时引入，而不是为了炫技滥用。</div>
+    </li>
+  </ul>
+
+  <div class="pagenav">
+    <a class="prev" href="index.html"><span class="lbl">返回首页</span>全部章节</a>
+    <a class="next" href="ch02.html"><span class="lbl">下一章</span>第 2 章：初识 AspectJ</a>
+  </div>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

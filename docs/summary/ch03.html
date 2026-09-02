@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第 3 章：理解连接点模型 | AspectJ in Action 图解笔记</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar">
+  <a href="index.html">&larr; 全部章节</a>
+  <span>AspectJ in Action · 图解笔记</span>
+</div>
+<div class="page">
+
+  <span class="kicker">CHAPTER 03</span>
+  <h1>理解连接点模型</h1>
+  <p class="subtitle">一句话概括本章：先搞懂 AspectJ 到底能在程序的“哪些时刻”插手做事（连接点），再学会用切点表达式精确挑出你想要的那些时刻。</p>
+
+  <div class="covers">
+    <h4>本章你将学到</h4>
+    <ul>
+      <li>连接点（join point）到底是什么，AspectJ 只暴露哪些种类的连接点</li>
+      <li>新手最容易搞混的一对概念：<code class="inline">call</code>（调用处）vs. <code class="inline">execution</code>（执行体）</li>
+      <li>切点（pointcut）的签名语法：通配符 <code class="inline">*</code>、<code class="inline">..</code>、<code class="inline">+</code> 怎么用</li>
+      <li>用真实的追踪切面，看懂一段程序执行时到底产生了哪些连接点</li>
+    </ul>
+  </div>
+
+  <h2>1. 连接点：程序执行中的“可插手时刻”</h2>
+  <p>
+    把一次程序运行想象成一部电影，播放过程中有无数个瞬间：某一帧画面、某句台词说出口的一刻、字幕出现的一刻……
+    如果你能在这些瞬间里“插播”一段广告，那么每一个可以插播的瞬间，就是一个<strong>连接点（join point）</strong>。
+  </p>
+  <p>
+    Java 程序运行时其实有无数个这样的瞬间：调用一个方法、方法体真正执行、给字段赋值、读取字段、抛出异常被 catch 住、类第一次被加载……
+    但 AspectJ 并不会把<em>所有</em>瞬间都开放给你，它只精心挑选了一小部分“稳定、有意义”的瞬间对外暴露——这样你写出来的切面才不会因为一次不相关的重构（比如把一行代码拆成两行）就莫名其妙失效。
+  </p>
+
+  <div class="callout tip">
+    <span class="label">💡 类比</span>
+    <p>连接点有点像 PowerPoint 里的“动画触发点”——它不是画面上任意一个像素，而是“某个对象出现”“某次点击”这种被明确定义、可以挂动画的时刻。AspectJ 的连接点也是同理：只在明确定义的程序时刻才能挂上你的逻辑。</p>
+  </div>
+
+  <h2>2. 最容易踩坑的一对概念：call vs. execution</h2>
+  <p>
+    书里用一个记账系统举例：<code class="inline">AccountService</code> 调用 <code class="inline">Account.debit()</code>。这里其实藏着<strong>两个不同的连接点</strong>：
+  </p>
+  <ul>
+    <li><strong>call 连接点</strong>：发生在<em>调用方</em>那一行代码——“我要调用 debit() 了”。</li>
+    <li><strong>execution 连接点</strong>：发生在<em>被调用方</em>——debit() 方法体真正跑起来的那段过程。</li>
+  </ul>
+  <p>用本仓库 <code class="inline">ch03</code> 的真实例子来看会更直观：<code class="inline">Main.main()</code> 里执行了 <code class="inline">new Order().getTotalPrice()</code>。</p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 640 260" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow-ch03-1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <rect class="box" x="30" y="30" width="190" height="56" rx="10"/>
+      <text x="125" y="63" text-anchor="middle" font-size="14">Main.main()</text>
+
+      <rect class="box" x="420" y="150" width="190" height="70" rx="10"/>
+      <text x="515" y="180" text-anchor="middle" font-size="14">Order.getTotalPrice()</text>
+      <text x="515" y="198" text-anchor="middle" font-size="12" class="dim">方法体内部逻辑</text>
+
+      <path class="arrow" d="M180,86 C 250,120 350,120 425,150" style="color:var(--text-dim)" marker-end="url(#arrow-ch03-1)"/>
+
+      <circle cx="200" cy="98" r="5" fill="var(--old)"/>
+      <text x="212" y="102" font-size="12.5" fill="var(--old)">① call 连接点（在 Main 这一侧：“发起调用”这一刻）</text>
+
+      <rect x="420" y="150" width="190" height="70" rx="10" fill="none" stroke="var(--new)" stroke-width="2.5" stroke-dasharray="5,3"/>
+      <text x="515" y="238" text-anchor="middle" font-size="12.5" fill="var(--new)">② execution 连接点（在 Order 这一侧：整个方法体的执行过程）</text>
+    </svg>
+    <div class="caption">图 3-1　同一次方法调用，caller 端和 callee 端各有一个连接点——它们不是同一个东西</div>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">⚠️ 新手常见错误</span>
+    <p>
+      如果你想在 <code class="inline">Order</code> 类里插入逻辑（比如记录“这个方法被执行了多久”），要用 <code class="inline">execution()</code>；
+      如果你只想在<em>调用方</em>那里做点手脚（比如统计“Main 一共调用了几次这个方法”），才用 <code class="inline">call()</code>。
+      两者织入（weave）的位置完全不同：<code class="inline">execution</code> 把逻辑织进 <code class="inline">Order</code> 类本身，<code class="inline">call</code> 把逻辑织进每一个调用它的地方。
+    </p>
+  </div>
+
+  <h2>3. AspectJ 暴露的连接点种类一览</h2>
+  <p>下面这些就是 AspectJ 精心挑选、对外开放的全部“可插手时刻”：</p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 640 210" xmlns="http://www.w3.org/2000/svg">
+      <g font-size="12.5" text-anchor="middle">
+        <rect class="box" x="10"  y="10" width="140" height="50" rx="8"/><text x="80" y="30">方法</text><text x="80" y="46" class="dim">call / execution</text>
+        <rect class="box" x="165" y="10" width="140" height="50" rx="8"/><text x="235" y="30">构造器</text><text x="235" y="46" class="dim">call / execution</text>
+        <rect class="box" x="320" y="10" width="140" height="50" rx="8"/><text x="390" y="30">字段访问</text><text x="390" y="46" class="dim">get / set</text>
+        <rect class="box" x="475" y="10" width="140" height="50" rx="8"/><text x="545" y="30">异常处理</text><text x="545" y="46" class="dim">catch 块 handler</text>
+
+        <rect class="box" x="10"  y="80" width="140" height="50" rx="8"/><text x="80" y="100">类初始化</text><text x="80" y="116" class="dim">staticinitialization</text>
+        <rect class="box" x="165" y="80" width="140" height="50" rx="8"/><text x="235" y="100">对象初始化</text><text x="235" y="116" class="dim">initialization</text>
+        <rect class="box" x="320" y="80" width="140" height="50" rx="8"/><text x="390" y="100">对象预初始化</text><text x="390" y="116" class="dim">preinitialization</text>
+        <rect class="accentbox" x="475" y="80" width="140" height="50" rx="8"/><text x="545" y="100">通知执行</text><text x="545" y="116" class="dim">adviceexecution</text>
+      </g>
+      <text x="320" y="160" text-anchor="middle" font-size="12.5" class="dim">↑ 前三行是“Java 本来就有的时刻”；右下角这个是 AspectJ 自己额外开放的（通知本身执行也是一个连接点）</text>
+    </svg>
+    <div class="caption">图 3-2　AspectJ 暴露的连接点分类（表 3.1 的图解版）</div>
+  </div>
+
+  <table class="tbl">
+    <tr><th>连接点种类</th><th>对应切点关键字</th><th>选中的是什么</th></tr>
+    <tr><td>方法执行</td><td><code class="inline">execution(方法签名)</code></td><td>方法体内部</td></tr>
+    <tr><td>方法调用</td><td><code class="inline">call(方法签名)</code></td><td>调用该方法的那一行代码</td></tr>
+    <tr><td>字段读取 / 写入</td><td><code class="inline">get(字段签名)</code> / <code class="inline">set(字段签名)</code></td><td>读 / 写某个字段的那一刻</td></tr>
+    <tr><td>异常处理</td><td><code class="inline">handler(异常类型)</code></td><td>catch 块内部</td></tr>
+    <tr><td>类初始化</td><td><code class="inline">staticinitialization(类型)</code></td><td>类首次加载时的静态代码块</td></tr>
+  </table>
+
+  <h2>4. 切点：怎么“挑出”想要的连接点</h2>
+  <p>
+    知道了连接点长什么样，下一步就是学会写<strong>切点表达式（pointcut）</strong>去精确地把它们选出来。
+    切点表达式的核心，是对 Java 元素“签名”做模式匹配，AspectJ 提供三个通配符：
+  </p>
+  <table class="tbl">
+    <tr><th>通配符</th><th>含义</th><th>例子</th></tr>
+    <tr><td><code class="inline">*</code></td><td>匹配任意一段名字（不跨包，不含点）</td><td><code class="inline">*Account</code> 匹配 <code class="inline">SavingsAccount</code></td></tr>
+    <tr><td><code class="inline">..</code></td><td>匹配任意多段（含点）——用在包名表示“所有子包”，用在参数列表表示“任意个数、任意类型参数”</td><td><code class="inline">com.shop..*</code>、<code class="inline">place(..)</code></td></tr>
+    <tr><td><code class="inline">+</code></td><td>匹配某类型及其所有子类型</td><td><code class="inline">Order+</code> 匹配 <code class="inline">Order</code> 及其子类</td></tr>
+  </table>
+
+  <div class="diagram">
+    <svg viewBox="0 0 640 190" xmlns="http://www.w3.org/2000/svg">
+      <text x="20" y="40" font-family="SFMono-Regular,Consolas,monospace" font-size="16">execution( public&#160;&#160; *&#160;&#160;&#160; Order.place(..) )</text>
+
+      <line x1="55" y1="52" x2="55" y2="70" class="arrow" style="color:var(--text-dim)" marker-end="none" stroke-dasharray="3,3"/>
+      <text x="55" y="86" text-anchor="middle" font-size="12" class="dim">切点<tspan x="55" dy="14">类型</tspan></text>
+
+      <line x1="150" y1="52" x2="150" y2="70" stroke="var(--text-dim)" stroke-dasharray="3,3"/>
+      <text x="150" y="86" text-anchor="middle" font-size="12" class="dim">修饰符<tspan x="150" dy="14">（可省略）</tspan></text>
+
+      <line x1="215" y1="52" x2="215" y2="70" stroke="var(--text-dim)" stroke-dasharray="3,3"/>
+      <text x="215" y="86" text-anchor="middle" font-size="12" class="dim">返回类型<tspan x="215" dy="14">（* = 任意）</tspan></text>
+
+      <line x1="280" y1="52" x2="280" y2="70" stroke="var(--accent)" stroke-dasharray="3,3"/>
+      <text x="280" y="86" text-anchor="middle" font-size="12" fill="var(--accent-text)">声明类型<tspan x="280" dy="14">Order</tspan></text>
+
+      <line x1="345" y1="52" x2="345" y2="70" stroke="var(--accent)" stroke-dasharray="3,3"/>
+      <text x="345" y="86" text-anchor="middle" font-size="12" fill="var(--accent-text)">方法名<tspan x="345" dy="14">place</tspan></text>
+
+      <line x1="400" y1="52" x2="400" y2="70" stroke="var(--text-dim)" stroke-dasharray="3,3"/>
+      <text x="400" y="86" text-anchor="middle" font-size="12" class="dim">参数<tspan x="400" dy="14">(.. = 任意)</tspan></text>
+
+      <text x="320" y="140" text-anchor="middle" font-size="13" class="dim">含义：Order 类中，名字叫 place、public、返回任意类型、参数任意的方法——被“执行”的那一刻</text>
+    </svg>
+    <div class="caption">图 3-3　拆解一个切点表达式：<code>execution(public * Order.place(..))</code></div>
+  </div>
+
+  <h2>5. 用真实追踪切面看懂输出</h2>
+  <p>
+    仓库里 <code class="inline">ch03/workspace/Section3.3JoinPointDemonstrationExample</code> 有一个很好的教学例子：<code class="inline">JoinPointTraceAspect</code> 会打印<em>所有</em>发生在它自己之外的连接点。
+  </p>
+  <div class="code">
+    <div class="file">ajia/tracing/JoinPointTraceAspect.aj（书中原版，传统语法）</div>
+    <pre><code><span class="tok-kw">public aspect</span> JoinPointTraceAspect {
+    <span class="tok-kw">private int</span> callDepth;
+
+    <span class="tok-kw">pointcut</span> traced() : <span class="tok-kw">!within</span>(JoinPointTraceAspect);
+
+    <span class="tok-kw">before</span>() : traced() {
+        print(<span class="tok-str">"Before"</span>, thisJoinPoint);
+        callDepth++;
+    }
+    <span class="tok-kw">after</span>() : traced() {
+        callDepth--;
+        print(<span class="tok-str">"After"</span>, thisJoinPoint);
+    }
+    <span class="tok-cm">// print(...) 用 callDepth 控制缩进，方便肉眼看出调用层级</span>
+}</code></pre>
+  </div>
+  <p>运行 <code class="inline">Main</code>（只是 <code class="inline">new Order().getTotalPrice()</code>）后，你会看到类似这样的输出（节选）：</p>
+  <div class="code">
+    <div class="file">运行输出（节选）</div>
+    <pre><code>Before: execution(void ajia.main.Main.main(String[]))
+  Before: call(ajia.domain.Order())
+    Before: initialization(ajia.domain.Order())
+      Before: execution(ajia.domain.Order())
+        Before: call(java.util.ArrayList())
+        After: call(java.util.ArrayList())
+        Before: set(Collection ajia.domain.Order.lineItems)
+        After: set(Collection ajia.domain.Order.lineItems)
+      After: execution(ajia.domain.Order())
+    After: initialization(ajia.domain.Order())
+  After: call(ajia.domain.Order())
+  Before: call(double ajia.domain.Order.getTotalPrice())
+    Before: execution(double ajia.domain.Order.getTotalPrice())
+      Before: call(Collection ajia.domain.Order.getLineItems())
+        ...
+    After: execution(double ajia.domain.Order.getTotalPrice())
+  After: call(double ajia.domain.Order.getTotalPrice())
+After: execution(void ajia.main.Main.main(String[]))</code></pre>
+  </div>
+  <p>
+    注意看：<code class="inline">call(ajia.domain.Order())</code>（在 Main 里发起的构造调用）和它内部展开的
+    <code class="inline">initialization(...)</code> / <code class="inline">execution(...)</code> 是层层嵌套的——这正好印证了第 2 节说的“call 和 execution 是两个不同、但相关的连接点”。
+    <code class="inline">set(Collection ajia.domain.Order.lineItems)</code> 这一行，则是 <code class="inline">Order</code> 构造函数里给字段赋初值时触发的字段写入连接点。
+  </p>
+
+  <div class="versus">
+    <div class="col old">
+      <div class="tag">书中写法（已过时）</div>
+      <ul>
+        <li>文件后缀 <code class="inline">.aj</code>，用 <code class="inline">public aspect</code> 传统语法</li>
+        <li>必须用 <code class="inline">ajc</code>（AspectJ 自带编译器）编译，普通 <code class="inline">javac</code> 无法识别</li>
+      </ul>
+    </div>
+    <div class="col new">
+      <div class="tag">推荐的现代写法</div>
+      <ul>
+        <li>普通 <code class="inline">.java</code> 文件 + <code class="inline">@Aspect</code> 注解（第 7 章详细讲）</li>
+        <li>Maven 里配 <code class="inline">dev.aspectj:aspectj-maven-plugin</code> 自动调用最新 ajc，IDE 兼容性也更好</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="code">
+    <div class="file">同样逻辑的现代 @AspectJ 注解写法（预告第 7 章）</div>
+    <pre><code><span class="tok-ann">@Aspect</span>
+<span class="tok-kw">public class</span> JoinPointTraceAspect {
+    <span class="tok-kw">private int</span> callDepth;
+
+    <span class="tok-ann">@Before</span>(<span class="tok-str">"!within(ajia.tracing.JoinPointTraceAspect)"</span>)
+    <span class="tok-kw">public void</span> before(JoinPoint jp) {
+        print(<span class="tok-str">"Before"</span>, jp);
+        callDepth++;
+    }
+
+    <span class="tok-ann">@After</span>(<span class="tok-str">"!within(ajia.tracing.JoinPointTraceAspect)"</span>)
+    <span class="tok-kw">public void</span> after(JoinPoint jp) {
+        callDepth--;
+        print(<span class="tok-str">"After"</span>, jp);
+    }
+}</code></pre>
+  </div>
+
+  <div class="exercise">
+    <span class="label">✏️ 动手练习</span>
+    <p>
+      打开 <code class="inline">ch03/workspace/Section3.3JoinPointDemonstrationExample</code>，把 <code class="inline">Main</code> 改成先创建两个 <code class="inline">Order</code> 并互相调用 <code class="inline">addItem()</code>，
+      重新运行后对照输出，找一找哪一行对应 <code class="inline">call</code>、哪一行对应 <code class="inline">execution</code>，再试着把切点从 <code class="inline">!within(...)</code> 改成
+      <code class="inline">execution(* ajia.domain.Order.*(..))</code>，看看输出量是不是一下少了很多——这就是切点在“精确过滤”连接点。
+    </p>
+  </div>
+
+  <h2>小结 &amp; 自测</h2>
+  <ul class="quiz">
+    <li class="q">一句话说说什么是连接点？
+      <div class="a">程序执行过程中一个被 AspectJ 明确定义、可以插入横切逻辑的时刻，比如方法执行、字段写入、异常处理等——但不是任意语句，比如单条 if 语句就不是连接点。</div>
+    </li>
+    <li class="q">call 连接点和 execution 连接点最本质的区别是什么？
+      <div class="a">位置不同：call 发生在“调用方”那一行代码，execution 发生在“被调用方”方法体内部。织入时机也因此不同——只想影响调用方就用 call，想改方法本身的行为就用 execution。</div>
+    </li>
+    <li class="q"><code class="inline">execution(* Order+.*(..))</code> 里的 <code class="inline">+</code> 是什么意思？
+      <div class="a">表示 Order 及其所有子类型，不只是 Order 自己。</div>
+    </li>
+    <li class="q">为什么 Spring AOP 只支持 execution() 这一种连接点？
+      <div class="a">Spring AOP 用动态代理实现，代理只能拦截“方法调用”这个层面，没有能力深入到字段读写、异常处理块等更细粒度的字节码层面——这些细粒度能力只有原生 AspectJ 的编译期/加载期织入才具备（第 9 章详细对比）。</div>
+    </li>
+    <li class="q"><code class="inline">execution(* Account.*(..)) &amp;&amp; call(* Account.*(..))</code> 这个切点能选中什么？
+      <div class="a">什么都选不中！因为一个连接点不可能同时既是 execution 又是 call——两者发生在不同位置。用 && 组合不同"种类"的切点，结果永远是空集，这是新手最常踩的坑之一，应改用 ||。</div>
+    </li>
+  </ul>
+
+  <div class="pagenav">
+    <a class="prev" href="ch02.html"><span class="lbl">上一章</span>第 2 章：初识 AspectJ</a>
+    <a class="next" href="ch04.html"><span class="lbl">下一章</span>第 4 章：用动态切面修改行为</a>
+  </div>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

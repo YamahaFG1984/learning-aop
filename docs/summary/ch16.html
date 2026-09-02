@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第 16 章：改善领域逻辑 | AspectJ in Action 图解笔记</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar">
+  <a href="index.html">&larr; 全部章节</a>
+  <span>AspectJ in Action · 图解笔记</span>
+</div>
+<div class="page">
+
+  <span class="kicker">CHAPTER 16</span>
+  <h1>改善领域逻辑</h1>
+  <p class="subtitle">一句话概括本章：前面 14 章都在用切面处理"基础设施"型的横切关注点（日志、事务、安全）；这一章反过来，教你用 AOP 把业务逻辑本身也变得更健康——让"只有 getter/setter 的贫血对象"重新长出行为。</p>
+
+  <div class="covers">
+    <h4>本章你将学到</h4>
+    <ul>
+      <li>什么是"贫血领域模型"，为什么它是个问题</li>
+      <li>怎么用切面把 Spring 容器的依赖注入能力，扩展到 <code class="inline">new</code> 出来的领域对象上</li>
+      <li>用类型间声明（ITD）给领域对象"充血"：把散落在 Service 里的逻辑搬回实体</li>
+      <li>用切面统一实施领域级的业务规则（订单校验、聚合边界保护）</li>
+    </ul>
+  </div>
+
+  <h2>1. 贫血模型的问题：逻辑去哪了？</h2>
+  <p>
+    面向对象的初衷是"数据 + 行为绑在一起"，但现实中很多领域对象——尤其是 JPA 实体——常常沦为纯粹的数据容器：只有字段和 <code class="inline">getter</code>/<code class="inline">setter</code>，
+    所有计算逻辑都被塞进了 <code class="inline">OrderService</code> 这样的服务类。Martin Fowler 把这种现象叫做<b>贫血领域模型（Anemic Domain Model）</b>。
+  </p>
+  <p>
+    根源在于：领域对象往往由 <code class="inline">new</code> 或 ORM 框架反射创建，不受 Spring 容器管理，所以没法用普通的依赖注入拿到协作对象（比如一个计算折扣的 <code class="inline">PricingStrategy</code>）。
+    没有依赖，就写不出真正的业务方法，逻辑只能被迫搬到能拿到依赖的 Service 层。
+  </p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 640 260" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow-ch16-1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <text x="150" y="24" text-anchor="middle" font-weight="700" font-size="13">贫血模型</text>
+      <rect class="oldbox" x="50" y="40" width="200" height="70" rx="10"/>
+      <text x="150" y="65" text-anchor="middle" font-size="13">Order</text>
+      <text x="150" y="85" text-anchor="middle" font-size="11" class="dim">只有 getter / setter</text>
+      <text x="150" y="100" text-anchor="middle" font-size="11" class="dim">没有业务方法</text>
+
+      <rect class="box" x="50" y="150" width="200" height="70" rx="10"/>
+      <text x="150" y="175" text-anchor="middle" font-size="13">OrderService</text>
+      <text x="150" y="195" text-anchor="middle" font-size="11" class="dim">所有定价 / 校验逻辑</text>
+      <text x="150" y="210" text-anchor="middle" font-size="11" class="dim">都写在这里</text>
+
+      <path class="arrow" d="M150,110 L150,145" marker-end="url(#arrow-ch16-1)"/>
+      <text x="170" y="132" font-size="10" class="dim">操作</text>
+
+      <path class="arrow-accent" d="M270,110 C 340,110 340,60 400,60" marker-end="url(#arrow-ch16-1)"/>
+      <text x="400" y="130" text-anchor="middle" font-size="11" fill="var(--accent-text)">用 ITD 把行为搬回实体</text>
+
+      <text x="480" y="24" text-anchor="middle" font-weight="700" font-size="13">充血模型</text>
+      <rect class="newbox" x="400" y="40" width="220" height="130" rx="10"/>
+      <text x="510" y="65" text-anchor="middle" font-size="13">Order</text>
+      <text x="510" y="85" text-anchor="middle" font-size="11" class="dim">getTotalPrice()</text>
+      <text x="510" y="100" text-anchor="middle" font-size="11" class="dim">addProduct() / removeProduct()</text>
+      <text x="510" y="115" text-anchor="middle" font-size="11" class="dim">业务方法长在实体自己身上</text>
+
+      <rect class="box" x="400" y="185" width="220" height="45" rx="10"/>
+      <text x="510" y="212" text-anchor="middle" font-size="12">OrderService（变薄，只做编排）</text>
+    </svg>
+    <div class="caption">图 16-1　把散落在 Service 里的逻辑，通过 ITD 重新"焊接"回领域对象</div>
+  </div>
+
+  <div class="callout tip">
+    <span class="label">💡 类比</span>
+    <p>贫血模型就像一个只会"被填表"的空白表格（Order 只有字段），所有"怎么算总价、怎么判断是否超额"的智慧都锁在另一个人（OrderService）脑子里。充血模型则是让表格自己长出计算器——你问表格"你的总价是多少"，它自己就能算出来。</p>
+  </div>
+
+  <h2>2. 关键难题：怎么把依赖注入到 <code class="inline">new</code> 出来的对象里？</h2>
+  <p>
+    Spring 容器只管理它自己创建的 Bean。<code class="inline">new Order()</code> 这行代码完全绕开了容器，Spring 根本不知道这个对象存在，自然没法帮它注入 <code class="inline">PricingStrategy</code>。
+    书中给出的解法是：写一个切面，在"任何 <code class="inline">Order</code> 实例被创建（或反序列化）"这个连接点上插入一段依赖注入逻辑——这正是 <b>Spring 的 <code class="inline">@Configurable</code></b> 机制的原型。
+  </p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 640 240" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow-ch16-2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <rect class="box" x="30" y="30" width="180" height="60" rx="10"/>
+      <text x="120" y="65" text-anchor="middle" font-size="13">Spring 容器</text>
+
+      <rect class="box" x="30" y="150" width="180" height="60" rx="10"/>
+      <text x="120" y="175" text-anchor="middle" font-size="12">new Order()</text>
+      <text x="120" y="193" text-anchor="middle" font-size="11" class="dim">代码里直接 new 出来</text>
+
+      <path class="arrow" d="M120,90 C 120,120 120,120 120,145" stroke-dasharray="4,3" style="stroke:var(--old)" marker-end="url(#arrow-ch15-1)"/>
+      <text x="230" y="115" font-size="11" style="fill:var(--old)">container 看不到我 ✗</text>
+
+      <rect class="accentbox" x="380" y="90" width="220" height="60" rx="10"/>
+      <text x="490" y="115" text-anchor="middle" font-size="12">DI 织入切面</text>
+      <text x="490" y="133" text-anchor="middle" font-size="11" class="dim">(AnnotationBeanConfigurerAspect)</text>
+
+      <path class="arrow-accent" d="M210,60 C 320,60 320,110 375,115" marker-end="url(#arrow-ch16-2)"/>
+      <path class="arrow-accent" d="M375,135 C 320,150 230,180 215,180" marker-end="url(#arrow-ch16-2)"/>
+      <text x="490" y="200" text-anchor="middle" font-size="11" style="fill:var(--new)">拦截构造过程，硬把依赖塞进去 ✓</text>
+    </svg>
+    <div class="caption">图 16-2　@Configurable 的原理：织入的切面在对象构造时"截胡"，绕过容器直接完成注入</div>
+  </div>
+
+  <h3>三种给领域对象做 DI 的方式</h3>
+  <div class="code">
+    <div class="file">ajia/domain/Order.java（书中写法，字段类型需升级到 jakarta.persistence，见下方版本提醒）</div>
+    <pre><code><span class="tok-ann">@Entity</span>
+<span class="tok-ann">@Table</span>(name = "orders")
+<span class="tok-ann">@Configurable</span>                       <span class="tok-cm">// 告诉 Spring：这不是 Bean，但也请帮它注入依赖</span>
+public class Order extends DomainEntity {
+
+    <span class="tok-ann">@Autowired</span> private transient PricingStrategy pricingStrategy;
+
+    public double getTotalPrice() {
+        return pricingStrategy.getPrice(this);   <span class="tok-cm">// 业务逻辑现在长在实体自己身上</span>
+    }
+}</code></pre>
+  </div>
+
+  <p>
+    要让 <code class="inline">@Configurable</code> 生效，仅仅加注解不够，还需要在 Spring 配置里打开"配置感知织入"，并且<b>用 AspectJ 织入</b>（而不是 Spring AOP 代理）——
+    因为这个切面要拦截的是"对象构造"这个连接点，Spring AOP 的代理机制根本插不进构造函数里。
+  </p>
+
+  <div class="versus">
+    <div class="col old">
+      <div class="tag">书中写法（已过时）</div>
+      <ul>
+        <li>XML：<code class="inline">&lt;context:spring-configured/&gt;</code></li>
+        <li><code class="inline">javax.persistence.Entity</code></li>
+        <li>需要在 <code class="inline">pom.xml</code> 里手动接入 AspectJ 编译期/加载期织入</li>
+      </ul>
+    </div>
+    <div class="col new">
+      <div class="tag">推荐的现代写法</div>
+      <ul>
+        <li><code class="inline">@EnableSpringConfigured</code>（等价的 Java 配置）</li>
+        <li><code class="inline">jakarta.persistence.Entity</code>（Spring Boot 3.x 起 JPA 命名空间已迁移到 Jakarta）</li>
+        <li>Maven 里配 <code class="inline">spring-aspects</code> 依赖 + <code class="inline">dev.aspectj:aspectj-maven-plugin</code> 做编译期织入，或用 <code class="inline">-javaagent:spring-instrument.jar</code> 做加载期织入</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="code">
+    <div class="file">pom.xml（现代等价配置，启用 @Configurable）</div>
+    <pre><code>&lt;dependency&gt;
+  &lt;groupId&gt;org.springframework&lt;/groupId&gt;
+  &lt;artifactId&gt;spring-aspects&lt;/artifactId&gt;
+  &lt;!-- 版本随 Spring Boot BOM，无需单独指定 --&gt;
+&lt;/dependency&gt;
+
+&lt;plugin&gt;
+  &lt;groupId&gt;dev.aspectj&lt;/groupId&gt;
+  &lt;artifactId&gt;aspectj-maven-plugin&lt;/artifactId&gt;
+  &lt;configuration&gt;
+    &lt;aspectLibraries&gt;
+      &lt;aspectLibrary&gt;
+        &lt;groupId&gt;org.springframework&lt;/groupId&gt;
+        &lt;artifactId&gt;spring-aspects&lt;/artifactId&gt;
+      &lt;/aspectLibrary&gt;
+    &lt;/aspectLibraries&gt;
+  &lt;/configuration&gt;
+&lt;/plugin&gt;</code></pre>
+  </div>
+
+  <div class="callout modern">
+    <span class="label">🔧 现代化提示</span>
+    <p>
+      <code class="inline">@Configurable</code> 至今仍是 Spring 官方功能，是本章"依赖注入织入切面"思想最直接的延续，主要用在 JPA 实体这类<b>不得不由持久化框架而不是 Spring 创建</b>的对象上。
+      但要注意：如今更主流的做法是<b>尽量让领域对象保持"纯粹"</b>——不依赖 Spring，通过构造函数接收依赖，由充血的领域服务/工厂方法组装（也就是 DDD 里说的"贫血 Entity + 显式的领域服务"或"真正充血但用工厂组装"两种取舍）。
+      像本章这样用织入把容器能力"偷渡"进 <code class="inline">new</code> 出来的对象，是一种更高级、更小众的技巧，日常业务代码里请优先考虑构造函数注入，只有在实体确实必须由 ORM 反射创建时才考虑 <code class="inline">@Configurable</code>。
+    </p>
+  </div>
+
+  <h2>3. 除了依赖注入，切面还能干什么</h2>
+  <p>本章后半段展示了几个"领域逻辑用切面会更干净"的例子：</p>
+  <ul>
+    <li><b>库存变更监控</b>——用 <code class="inline">after() returning</code> 通知在 <code class="inline">InventoryService.addProduct/removeProduct</code> 执行后通知监控系统，而不是在每个业务方法里手写一遍。</li>
+    <li><b>订单级校验</b>——用一个切面拦下所有修改 <code class="inline">Order</code> 的方法调用，统一跑校验规则（比如订单总额不能超限），并用 <code class="inline">!cflow(...)</code> 排除校验器自身的调用，避免递归。</li>
+    <li><b>聚合边界保护</b>——比如 <code class="inline">LineItem</code> 只能通过它所属的 <code class="inline">Order</code> 来修改，不能被 Web 层直接改动，用 <code class="inline">@AggregateRoot</code>/<code class="inline">@Aggregate</code> 注解 + 切面统一强制执行，呼应第 11 章讲过的"策略强制执行"思路。</li>
+  </ul>
+
+  <div class="code">
+    <div class="file">ajia/domain/OrderValidationAspect.aj（书中写法，逻辑保持不变）</div>
+    <pre><code>public aspect OrderValidationAspect {
+    private OrderValidator orderValidator;
+
+    public pointcut orderUpdate(Order order)
+        : execution(* Order.*(..)) &amp;&amp; this(order)
+          &amp;&amp; !cflow(execution(* OrderValidator+.*(..)));  <span class="tok-cm">// 排除校验器自己，防止死循环</span>
+
+    after(Order order) returning : orderUpdate(order) {
+        orderValidator.validate(order);
+    }
+}</code></pre>
+  </div>
+
+  <div class="callout warn">
+    <span class="label">⚠️ 现代替代方案</span>
+    <p>
+      如果你的校验规则比较简单（字段格式、非空、范围），现代 Spring 生态里首选 <b>Jakarta Bean Validation</b>（<code class="inline">@NotNull</code>、<code class="inline">@Max</code> 等 + <code class="inline">jakarta.validation-api</code>），
+      配合 <code class="inline">@Validated</code> 即可声明式完成，不需要专门写切面。只有当校验规则涉及跨对象的复杂业务逻辑（比如本章"订单总额不能超限"这种需要查询整个聚合的规则），
+      切面这种方式才真正体现优势。
+    </p>
+  </div>
+
+  <div class="exercise">
+    <span class="label">✏️ 动手练习</span>
+    <p>
+      打开仓库 <code class="inline">ch16/workspace/Section16.2.2CheckingForOrderLevelConstraint</code>，运行 <code class="inline">OrderValidationTest</code>。
+      然后尝试修改 <code class="inline">OrderValidatorTotalPrice</code> 里的 <code class="inline">MAX_ORDER_VALUE</code>，观察校验切面是如何在不改动 <code class="inline">Order</code> 类本身的情况下生效的。
+    </p>
+  </div>
+
+  <h2>小结 &amp; 自测</h2>
+  <ul class="quiz">
+    <li class="q">什么是"贫血领域模型"？它的根本原因是什么？
+      <div class="a">指领域对象只有数据（getter/setter）没有行为，所有逻辑都被推到 Service 层。根本原因是领域对象通常由 <code class="inline">new</code> 或 ORM 反射创建，拿不到 Spring 容器管理的协作对象，写不出依赖它们的业务方法。</div>
+    </li>
+    <li class="q"><code class="inline">@Configurable</code> 为什么必须用 AspectJ 织入而不能用 Spring AOP 代理实现？
+      <div class="a">因为它要拦截的连接点是"对象的构造/反序列化过程"，而 Spring AOP 的代理是在对象创建完成之后包一层壳，根本没有机会介入构造过程本身；只有编译期或加载期织入能改写构造逻辑。</div>
+    </li>
+    <li class="q">书中用 ITD（类型间声明）把"简化版 API"加到 <code class="inline">Order</code> 类上，这样做比直接写在 <code class="inline">Order.java</code> 里有什么好处？
+      <div class="a">可以把"面向使用便利性的辅助 API"和"核心领域逻辑"分别放在切面和类里，物理上分隔关注点，同时不需要修改原始类文件，便于按需增减。</div>
+    </li>
+    <li class="q"><code class="inline">!cflow(execution(* OrderValidator+.*(..)))</code> 这段切点的作用是什么？
+      <div class="a">排除"当前正处于 OrderValidator 及其子类方法执行过程中"的连接点，防止校验器内部对 Order 的调用又触发一次校验，导致无限递归。</div>
+    </li>
+    <li class="q">现代项目里，简单的字段校验（非空、范围）应该用切面还是 Bean Validation？
+      <div class="a">优先用 Jakarta Bean Validation 的注解（如 <code class="inline">@NotNull</code>），声明式且是行业标准；只有涉及跨字段/跨对象的复杂业务规则时才考虑专门写校验切面。</div>
+    </li>
+  </ul>
+
+  <div class="pagenav">
+    <a class="prev" href="ch15.html"><span class="lbl">上一章</span>第 15 章：应用安全</a>
+    <a class="next" href="ch17.html"><span class="lbl">下一章</span>第 17 章：迈出下一步</a>
+  </div>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>

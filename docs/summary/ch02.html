@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第 2 章：初识 AspectJ | AspectJ in Action 图解笔记</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="topbar">
+  <a href="index.html">&larr; 全部章节</a>
+  <span>AspectJ in Action · 图解笔记</span>
+</div>
+<div class="page">
+
+  <span class="kicker">CHAPTER 02</span>
+  <h1>初识 AspectJ</h1>
+  <p class="subtitle">一句话概括本章：写出你的第一个切面，认识 join point / pointcut / advice / aspect 这四个词，并搞懂“织入”到底发生在什么时候。</p>
+
+  <div class="covers">
+    <h4>本章你将学到</h4>
+    <ul>
+      <li>用两种语法写同一个切面：传统 <code class="inline">.aj</code> 语法，和更现代的 <code class="inline">@AspectJ</code> 注解语法</li>
+      <li>编译期织入 / 二进制织入 / 加载期织入（LTW）三种方式的直觉区别</li>
+      <li>织入之后的类“变成了什么样子”（源码层面模拟一下织入结果）</li>
+      <li>Spring 怎么在不用 AspectJ 编译器的情况下，也能跑 @AspectJ 语法的切面</li>
+    </ul>
+  </div>
+
+  <h2>1. 一个朴素的业务类</h2>
+  <p>
+    书中示例仓库 <code class="inline">ch02/workspace/Section2.1.2AddingAnAspect</code> 里有一个非常简单的
+    <code class="inline">MessageCommunicator</code>：它只会把消息打印出来，完全不知道“权限校验”这回事。
+  </p>
+  <div class="code">
+    <div class="file">ajia/messaging/MessageCommunicator.java</div>
+    <pre><code><span class="tok-kw">package</span> ajia.messaging;
+
+<span class="tok-kw">public</span> <span class="tok-kw">class</span> MessageCommunicator {
+    <span class="tok-kw">public</span> <span class="tok-type">void</span> deliver(String message) {
+        System.out.println(message);
+    }
+    <span class="tok-kw">public</span> <span class="tok-type">void</span> deliver(String person, String message) {
+        System.out.println(person + <span class="tok-str">", "</span> + message);
+    }
+}</code></pre>
+  </div>
+  <p>现在的需求是：调用 <code class="inline">deliver</code> 之前必须先做一次身份认证。传统写法要在每个方法里手写一行 <code class="inline">authenticator.authenticate()</code>——这就是第 1 章说的“纠缠”。AOP 的做法是：<strong>一行都不改</strong> <code class="inline">MessageCommunicator</code>，另外写一个切面。</p>
+
+  <h2>2. 传统语法：<code class="inline">.aj</code> 文件</h2>
+  <p>这是仓库里真实的 <code class="inline">SecurityAspect.aj</code>（为可读性略去了版权头）：</p>
+  <div class="code">
+    <div class="file">ajia/security/SecurityAspect.aj</div>
+    <pre><code><span class="tok-kw">package</span> ajia.security;
+
+<span class="tok-kw">import</span> ajia.messaging.MessageCommunicator;
+
+<span class="tok-kw">public</span> <span class="tok-kw">aspect</span> SecurityAspect {
+    <span class="tok-kw">private</span> Authenticator authenticator = <span class="tok-kw">new</span> Authenticator();
+
+    <span class="tok-kw">pointcut</span> secureAccess()
+        : execution(* MessageCommunicator.deliver(..));
+
+    <span class="tok-kw">before</span>() : secureAccess() {
+        System.out.println(<span class="tok-str">"Checking and authenticating user"</span>);
+        authenticator.authenticate();
+    }
+}</code></pre>
+  </div>
+  <p>逐行对应回上一章的四个词：</p>
+  <table class="tbl">
+    <tr><th>代码</th><th>对应概念</th></tr>
+    <tr><td><code class="inline">public aspect SecurityAspect { ... }</code></td><td><strong>切面</strong>：新的模块单元，语法上很像 class</td></tr>
+    <tr><td><code class="inline">execution(* MessageCommunicator.deliver(..))</code></td><td><strong>切点表达式</strong>：选中“MessageCommunicator 类里任意返回值、任意参数的 deliver 方法被执行”这件事；<code class="inline">*</code> 通配返回值，<code class="inline">..</code> 通配参数列表</td></tr>
+    <tr><td><code class="inline">pointcut secureAccess() : ...</code></td><td>给上面这条切点表达式起个名字，方便复用</td></tr>
+    <tr><td><code class="inline">before() : secureAccess() { ... }</code></td><td><strong>通知</strong>：在命中的连接点（也就是每次 deliver 方法真正被调用时）<em>之前</em>执行这段代码</td></tr>
+  </table>
+
+  <div class="diagram">
+    <svg viewBox="0 0 660 260" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow-ch02-1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <rect class="box" x="230" y="20" width="200" height="46" rx="8"/>
+      <text x="330" y="48" text-anchor="middle" font-size="13">连接点：deliver() 被调用</text>
+
+      <rect class="accentbox" x="200" y="100" width="260" height="46" rx="8"/>
+      <text x="330" y="128" text-anchor="middle" font-size="13">切点：挑中所有 deliver() 调用</text>
+      <path class="arrow" d="M330,66 L330,96" marker-end="url(#arrow-ch02-1)"/>
+
+      <rect class="box" x="200" y="180" width="260" height="46" rx="8"/>
+      <text x="330" y="208" text-anchor="middle" font-size="13">通知：before，先鉴权再放行</text>
+      <path class="arrow" d="M330,146 L330,176" marker-end="url(#arrow-ch02-1)"/>
+
+      <rect class="oldbox" x="20" y="140" width="140" height="46" rx="8"/>
+      <text x="90" y="168" text-anchor="middle" font-size="12">容器：SecurityAspect</text>
+      <path class="arrow" d="M160,163 L196,140" marker-end="url(#arrow-ch02-1)"/>
+      <text x="330" y="240" text-anchor="middle" class="dim" font-size="12">切面 = 装着「切点 + 通知」这套组合拳的模块</text>
+    </svg>
+    <div class="caption">图 2-1　连接点是“候选事件”，切点从中筛选，通知定义命中后做什么，三者一起装在一个切面里</div>
+  </div>
+
+  <h2>3. 更现代的写法：<code class="inline">@AspectJ</code> 注解语法</h2>
+  <p>
+    从 AspectJ 5 开始（AspectWerkz 并入之后），同一个切面可以完全用普通 Java 注解写出来，不需要
+    <code class="inline">.aj</code> 文件，也不强制要求专用编译器：
+  </p>
+  <div class="code">
+    <div class="file">ajia/security/SecurityAspect.java（@AspectJ 语法版本）</div>
+    <pre><code><span class="tok-kw">package</span> ajia.security;
+
+<span class="tok-kw">import</span> org.aspectj.lang.annotation.Aspect;
+<span class="tok-kw">import</span> org.aspectj.lang.annotation.Before;
+<span class="tok-kw">import</span> org.aspectj.lang.annotation.Pointcut;
+
+<span class="tok-ann">@Aspect</span>
+<span class="tok-kw">public</span> <span class="tok-kw">class</span> SecurityAspect {
+
+    <span class="tok-kw">private</span> Authenticator authenticator = <span class="tok-kw">new</span> Authenticator();
+
+    <span class="tok-ann">@Pointcut</span>(<span class="tok-str">"execution(* ajia.messaging.MessageCommunicator.deliver(..))"</span>)
+    <span class="tok-kw">public</span> <span class="tok-type">void</span> secureAccess() {}
+
+    <span class="tok-ann">@Before</span>(<span class="tok-str">"secureAccess()"</span>)
+    <span class="tok-kw">public</span> <span class="tok-type">void</span> secure() {
+        System.out.println(<span class="tok-str">"Checking and authenticating user"</span>);
+        authenticator.authenticate();
+    }
+}</code></pre>
+  </div>
+  <div class="versus">
+    <div class="col old">
+      <div class="tag">.aj 传统语法</div>
+      <ul>
+        <li>需要 ajc 专用编译器（或至少专用插件）</li>
+        <li>语法更简洁，能表达全部 AspectJ 特性（含第 5 章的类型间声明）</li>
+        <li>普通 Java IDE/工具默认不认识 <code class="inline">.aj</code></li>
+      </ul>
+    </div>
+    <div class="col new">
+      <div class="tag">@AspectJ 注解语法（新代码推荐）</div>
+      <ul>
+        <li>本质是合法的 Java 代码，<code class="inline">javac</code> 能编译（但要真正生效仍需织入器或 Spring AOP 代理）</li>
+        <li>IDE 补全、重构、静态检查全部可用</li>
+        <li>是 Spring AOP 唯一支持的书写方式，见第 9 章</li>
+      </ul>
+    </div>
+  </div>
+  <p>注意一个容易踩的坑，书里也特别提醒过：<strong>单用 <code class="inline">javac</code> 编译带 <code class="inline">@Aspect</code> 的类，程序照样能跑，但切面完全不会生效</strong>——因为 <code class="inline">javac</code> 根本不认识 <code class="inline">@Aspect</code> 的语义，你还需要一个织入器或者 Spring 的代理机制真正把逻辑接上。</p>
+
+  <h2>4. 织入到底发生在什么时候</h2>
+  <p>AspectJ 提供三种织入时机，效果完全等价，只是发生的阶段不同：</p>
+  <div class="diagram">
+    <svg viewBox="0 0 680 260" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow-ch02-2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <rect class="box" x="20" y="30" width="140" height="44" rx="8"/>
+      <text x="90" y="57" text-anchor="middle" font-size="12">.java / .aj 源码</text>
+      <path class="arrow" d="M160,52 L210,52" marker-end="url(#arrow-ch02-2)"/>
+      <rect class="accentbox" x="210" y="30" width="150" height="44" rx="8"/>
+      <text x="285" y="52" text-anchor="middle" font-size="12">① 源码织入</text>
+      <text x="285" y="66" text-anchor="middle" font-size="10" class="dim">ajc 直接产出织入后字节码</text>
+
+      <rect class="box" x="20" y="100" width="140" height="44" rx="8"/>
+      <text x="90" y="127" text-anchor="middle" font-size="12">.class（已编译）</text>
+      <path class="arrow" d="M160,122 L210,122" marker-end="url(#arrow-ch02-2)"/>
+      <rect class="accentbox" x="210" y="100" width="150" height="44" rx="8"/>
+      <text x="285" y="122" text-anchor="middle" font-size="12">② 二进制织入</text>
+      <text x="285" y="136" text-anchor="middle" font-size="10" class="dim">ajc -inpath/-aspectpath</text>
+
+      <rect class="box" x="20" y="170" width="140" height="44" rx="8"/>
+      <text x="90" y="197" text-anchor="middle" font-size="12">类加载进 JVM 那一刻</text>
+      <path class="arrow" d="M160,192 L210,192" marker-end="url(#arrow-ch02-2)"/>
+      <rect class="accentbox" x="210" y="170" width="150" height="44" rx="8"/>
+      <text x="285" y="192" text-anchor="middle" font-size="12">③ 加载期织入 LTW</text>
+      <text x="285" y="206" text-anchor="middle" font-size="10" class="dim">-javaagent + aop.xml</text>
+
+      <path class="arrow-accent" d="M360,52 L360,192" />
+      <path class="arrow-accent" d="M360,192 L470,120" marker-end="url(#arrow-ch02-2)"/>
+      <rect class="newbox" x="470" y="90" width="180" height="60" rx="8"/>
+      <text x="560" y="115" text-anchor="middle" font-size="12">已织入的字节码</text>
+      <text x="560" y="133" text-anchor="middle" font-size="12">交给 JVM 正常执行</text>
+    </svg>
+    <div class="caption">图 2-2　三条路径殊途同归：不管在哪个阶段织入，最终 JVM 拿到的都是“切面逻辑已经焊进去”的字节码</div>
+  </div>
+  <p>本章只需要有这个直觉；第 8 章会展开讲三种方式各自的取舍（比如 LTW 不用改构建脚本，但需要 <code class="inline">-javaagent</code> 启动参数）。</p>
+
+  <div class="callout tip">
+    <span class="label">💡 一个更容易记住的类比</span>
+    <p>把 ajc 想象成 C/C++ 的链接器（linker）：javac/普通编译产出的 <code class="inline">.class</code> 相当于「目标文件」，织入器把「目标文件」和「切面」链接在一起，产出最终可执行的「字节码」。源码织入只是把「编译」和「链接」这两步合并成了一步。</p>
+  </div>
+
+  <h2>5. 现代化改造：用 Maven 而不是 Ant 跑起来</h2>
+  <p>
+    书中 2009 年版本用的是 <code class="inline">ajc</code> 命令行 + Ant（仓库里 <code class="inline">run-ant.sh</code>）或很旧版本的 Maven 插件。
+    今天写新项目，建议直接用 Maven（或 Gradle）+ 社区维护的 AspectJ 编译插件：
+  </p>
+  <div class="versus">
+    <div class="col old">
+      <div class="tag">书中写法（已过时）</div>
+      <ul>
+        <li>AspectJ 1.6.x，手动下载安装到 <code class="inline">ASPECTJ_HOME</code></li>
+        <li>Ant + <code class="inline">iajc</code> 任务，或非常旧的 Maven <code class="inline">aspectj-maven-plugin</code></li>
+        <li>命令行手敲 <code class="inline">ajc -source 5 ...</code></li>
+      </ul>
+    </div>
+    <div class="col new">
+      <div class="tag">推荐的现代写法</div>
+      <ul>
+        <li>AspectJ 1.9.x，作为 Maven 依赖引入，无需单独安装</li>
+        <li>Maven：<code class="inline">dev.aspectj:aspectj-maven-plugin</code>（老牌的 <code class="inline">org.codehaus.mojo:aspectj-maven-plugin</code> 已多年未更新，这是社区活跃维护的替代品）</li>
+        <li>Gradle：<code class="inline">io.freefair.aspectj</code> 插件</li>
+      </ul>
+    </div>
+  </div>
+  <div class="code">
+    <div class="file">pom.xml（关键片段，目标 Java 17）</div>
+    <pre><code>&lt;properties&gt;
+  &lt;aspectj.version&gt;1.9.22.1&lt;/aspectj.version&gt;
+&lt;/properties&gt;
+
+&lt;dependencies&gt;
+  &lt;dependency&gt;
+    &lt;groupId&gt;org.aspectj&lt;/groupId&gt;
+    &lt;artifactId&gt;aspectjrt&lt;/artifactId&gt;
+    &lt;version&gt;${aspectj.version}&lt;/version&gt;
+  &lt;/dependency&gt;
+&lt;/dependencies&gt;
+
+&lt;build&gt;
+  &lt;plugins&gt;
+    &lt;plugin&gt;
+      &lt;groupId&gt;dev.aspectj&lt;/groupId&gt;
+      &lt;artifactId&gt;aspectj-maven-plugin&lt;/artifactId&gt;
+      &lt;version&gt;1.14&lt;/version&gt;
+      &lt;configuration&gt;
+        &lt;source&gt;17&lt;/source&gt;
+        &lt;target&gt;17&lt;/target&gt;
+        &lt;complianceLevel&gt;17&lt;/complianceLevel&gt;
+        &lt;aspectLibraries&gt;
+          &lt;!-- 依赖里的切面库，例如 spring-aspects --&gt;
+        &lt;/aspectLibraries&gt;
+      &lt;/configuration&gt;
+      &lt;executions&gt;
+        &lt;execution&gt;
+          &lt;goals&gt;
+            &lt;goal&gt;compile&lt;/goal&gt;
+            &lt;goal&gt;test-compile&lt;/goal&gt;
+          &lt;/goals&gt;
+        &lt;/execution&gt;
+      &lt;/executions&gt;
+    &lt;/plugin&gt;
+  &lt;/plugins&gt;
+&lt;/build&gt;</code></pre>
+  </div>
+  <div class="callout warn">
+    <span class="label">⚠️ 版本号仅供参考</span>
+    <p>
+      AspectJ 和 <code class="inline">dev.aspectj:aspectj-maven-plugin</code> 都在持续发布新版本，实际项目里请到 Maven Central
+      查询当时的最新版本号，不要把本笔记里的版本号当成“永远最新”。
+    </p>
+  </div>
+
+  <h2>6. 一个预告：Spring 不需要 ajc 也能跑 @AspectJ 语法</h2>
+  <p>
+    如果你的 <code class="inline">SecurityAspect</code> 是用 <code class="inline">@AspectJ</code> 注解写的，Spring 容器可以直接识别它，
+    在 <code class="inline">@Configuration</code> 类上加一行 <code class="inline">@EnableAspectJAutoProxy</code>（对应书中 XML 时代的
+    <code class="inline">&lt;aop:aspectj-autoproxy/&gt;</code>），Spring 就会给 <code class="inline">MessageCommunicator</code> 这个 Bean
+    自动生成一个代理对象，在方法调用前后插入切面逻辑——<strong>全程不需要 AspectJ 编译器，也不需要 <code class="inline">-javaagent</code></strong>。
+    代价是：它只能拦截“方法执行”这一种连接点，而且只对 Spring 容器管理的 Bean 生效。这是第 9 章的主角，这里先有个印象即可。
+  </p>
+
+  <div class="exercise">
+    <span class="label">✏️ 动手练习</span>
+    <p>
+      打开仓库里的 <code class="inline">ch02/workspace/Section2.1.2AddingAnAspect</code>，把 <code class="inline">pom.xml</code>
+      换成本节的现代化片段，用 <code class="inline">mvn compile exec:java -Dexec.mainClass=ajia.main.Main</code> 跑一遍，
+      观察控制台是否先打印出“Checking and authenticating user”再打印消息内容。
+      然后再看看 <code class="inline">ch02/workspace/Section2.2.3InterTypeDeclaration</code> 里的 <code class="inline">TrackingAspect.aj</code>——
+      它演示了第 5 章才会详细讲的“类型间声明”，可以先睹为快。
+    </p>
+  </div>
+
+  <h2>小结 &amp; 自测</h2>
+  <ul class="quiz">
+    <li class="q"><code class="inline">execution(* MessageCommunicator.deliver(..))</code> 里两个 <code class="inline">*</code>/<code class="inline">..</code> 分别是什么意思？
+      <div class="a"><code class="inline">*</code> 通配返回值类型（任意类型都行）；<code class="inline">..</code> 通配参数列表（任意数量、任意类型的参数）。</div>
+    </li>
+    <li class="q">为什么单用 javac 编译 @AspectJ 语法的类，切面不会生效？
+      <div class="a">javac 只认识极少数标准注解（如 @Override），不理解 @Aspect/@Before 的语义。必须再经过一个织入器（ajc）或者依赖 Spring AOP 的代理机制，才能让切面逻辑真正接入执行路径。</div>
+    </li>
+    <li class="q">源码织入、二进制织入、加载期织入，最终产出的运行结果一样吗？
+      <div class="a">一样。三者只是“在哪个阶段把切面焊进字节码”不同，焊接完成后 JVM 执行的字节码在语义上是等价的。</div>
+    </li>
+    <li class="q">新项目应该优先选 .aj 语法还是 @AspectJ 语法？
+      <div class="a">没有静态类型间声明等高级需求时，优先 @AspectJ 注解语法：IDE 支持更好、和 Spring 天然兼容、团队上手成本更低。.aj 语法在需要第 5 章的类型间声明等能力时仍然有用。</div>
+    </li>
+    <li class="q">书中的 org.codehaus.mojo:aspectj-maven-plugin 现在还推荐用吗？
+      <div class="a">不推荐作为首选。它已多年缺乏更新，社区维护的 dev.aspectj:aspectj-maven-plugin 是目前更活跃的替代品，具体版本以 Maven Central 为准。</div>
+    </li>
+  </ul>
+
+  <div class="pagenav">
+    <a class="prev" href="ch01.html"><span class="lbl">上一章</span>第 1 章：发现 AOP</a>
+    <a class="next" href="ch03.html"><span class="lbl">下一章</span>第 3 章：理解连接点模型</a>
+  </div>
+</div>
+<script src="assets/site.js"></script>
+</body>
+</html>
