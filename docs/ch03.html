@@ -5,342 +5,450 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>第 3 章：理解连接点模型 | AspectJ in Action 图解笔记</title>
 <style>
-/* AspectJ in Action -- beginner-friendly chapter guide styles
-   Shared by index.html and every chXX.html / appendix*.html page. */
+/* ================================================================
+   AspectJ in Action 图解笔记 · 页面样式
+   每个页面内联同一份样式，单独拷出去也能打开。
+   ================================================================ */
 
+/* 每个颜色用 light-dark(浅色值, 深色值) 写一次，由 color-scheme 决定取哪一个：
+   默认跟随系统，脚本写入的 data-theme 可以强制指定。 */
 :root {
-  --bg: #f6f7fb;
-  --bg-panel: #ffffff;
-  --bg-code: #f0f2f8;
-  --bg-code-header: #e3e7f2;
-  --text: #1c2130;
-  --text-dim: #55607a;
-  --border: #dde1ee;
-  --accent: #5b5bd6;
-  --accent-dim: #eceafc;
-  --accent-text: #3f3fb0;
-  --good: #1a7f5a;
-  --good-bg: #e6f6ef;
-  --warn: #a15c00;
-  --warn-bg: #fdf1de;
-  --old: #b0203a;
-  --old-bg: #fbe9ec;
-  --new: #146c43;
-  --new-bg: #e7f6ee;
-  --shadow: 0 1px 2px rgba(30, 34, 54, 0.06), 0 8px 24px rgba(30, 34, 54, 0.05);
-  --radius: 14px;
   color-scheme: light dark;
-}
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #14161f;
-    --bg-panel: #1b1e2a;
-    --bg-code: #11131b;
-    --bg-code-header: #23273a;
-    --text: #e7e9f5;
-    --text-dim: #a4aac4;
-    --border: #2b2f42;
-    --accent: #9090f5;
-    --accent-dim: #262a44;
-    --accent-text: #b3b3fb;
-    --good: #4fd39a;
-    --good-bg: #123527;
-    --warn: #eab766;
-    --warn-bg: #3a2c11;
-    --old: #f18b9a;
-    --old-bg: #3a1620;
-    --new: #7ee2ae;
-    --new-bg: #10301f;
-    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35);
-  }
+  --bg:        light-dark(#fbfaf8, #171513);
+  --panel:     light-dark(#ffffff, #201d1a);
+  --panel-2:   light-dark(#f4f2ee, #2a2521);
+  --fg:        light-dark(#26221e, #ece6de);
+  --fg-soft:   light-dark(#5f584f, #b8afa3);
+  --fg-faint:  light-dark(#8c8377, #8b8378);
+  --line:      light-dark(#e2ddd4, #342e28);
+  --line-2:    light-dark(#cfc8bc, #463e36);
+  --accent:    light-dark(#d95602, #ff8f4d);
+  --accent-bg: light-dark(#fdf0e6, #33231a);
+  --accent-2:  light-dark(#b04503, #ffab77);
+  --green:     light-dark(#2f7d51, #6ac48d);
+  --green-bg:  light-dark(#eaf5ee, #1b2b21);
+  --blue:      light-dark(#2b6cb0, #7fb0e8);
+  --blue-bg:   light-dark(#eaf1f9, #1a232e);
+  --red:       light-dark(#c0392b, #f08076);
+  --red-bg:    light-dark(#fdecea, #2e1c1a);
+  --purple:    light-dark(#6b46c1, #b295ee);
+  --purple-bg: light-dark(#f1ecfb, #241d33);
+  --code-bg:   light-dark(#2b2620, #12100e);
+  --code-fg:   light-dark(#e9e2d8, #e6ded2);
+
+  --radius:    10px;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+          "Liberation Mono", "Noto Sans Mono CJK SC", monospace;
+
+  &[data-theme="light"] { color-scheme: light; }
+  &[data-theme="dark"]  { color-scheme: dark; }
 }
 
 * { box-sizing: border-box; }
 
-html { scroll-behavior: smooth; }
+html { scroll-behavior: smooth; scroll-padding-top: 1.5rem; }
 
 body {
   margin: 0;
   background: var(--bg);
-  color: var(--text);
-  font-family: -apple-system, "PingFang SC", "Segoe UI", "Noto Sans SC", Helvetica, Arial, sans-serif;
-  line-height: 1.75;
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.8;
+  -webkit-font-smoothing: antialiased;
 }
 
-.page {
-  max-width: 880px;
+/* ---------------- 布局 ---------------- */
+
+#app { display: flex; align-items: flex-start; }
+
+#sidebar {
+  --sidebar-w: 268px;
+  position: sticky;
+  top: 0;
+  flex: 0 0 var(--sidebar-w);
+  width: var(--sidebar-w);
+  height: 100dvh;
+  overflow-y: auto;
+  padding: 22px 14px 40px;
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+  font-size: 14px;
+
+  .brand {
+    display: flex; align-items: center; gap: 9px;
+    font-weight: 700; font-size: 16px; letter-spacing: .01em;
+    color: var(--fg); text-decoration: none;
+    padding: 4px 8px 14px;
+
+    .logo {
+      width: 26px; height: 26px; flex: none;
+      display: grid; place-items: center;
+      background: var(--accent); color: #fff; border-radius: 8px;
+      font-size: 12px; font-family: var(--mono); letter-spacing: -.02em;
+    }
+    small { display: block; font-weight: 400; font-size: 11px; color: var(--fg-faint); }
+  }
+
+  .part {
+    margin: 16px 8px 6px; font-size: 11px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--fg-faint); font-weight: 700;
+  }
+
+  a.ch {
+    display: flex; gap: 8px; align-items: baseline;
+    padding: 5px 8px; border-radius: 7px;
+    color: var(--fg-soft); text-decoration: none; line-height: 1.5;
+
+    &:hover  { background: var(--panel-2); color: var(--fg); }
+    &.active { background: var(--accent-bg); color: var(--accent-2); font-weight: 600; }
+
+    .n {
+      flex: none; width: 26px; text-align: right;
+      font-variant-numeric: tabular-nums; font-size: 12px; color: var(--fg-faint);
+    }
+    &.active .n { color: var(--accent); }
+  }
+}
+
+main {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 900px;
+  padding: 40px 44px 100px;
   margin: 0 auto;
-  padding: 28px 20px 90px;
 }
 
-.topbar {
-  max-width: 880px;
-  margin: 0 auto;
-  padding: 14px 20px 0;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 13px;
-  color: var(--text-dim);
+/* 两个悬浮按钮：移动端菜单、深浅色切换 */
+:is(#menu-btn, #theme-btn) {
+  position: fixed;
+  border: 1px solid var(--line-2); background: var(--panel); color: var(--fg);
+  cursor: pointer;
 }
-.topbar a { color: var(--text-dim); text-decoration: none; }
-.topbar a:hover { color: var(--accent-text); }
+#menu-btn {
+  display: none;
+  z-index: 40; inset: 12px auto auto 12px;
+  width: 42px; height: 42px; border-radius: 10px;
+  font-size: 18px;
+}
+#theme-btn {
+  z-index: 30; inset: auto 16px 16px auto;
+  width: 40px; height: 40px; border-radius: 50%;
+  font-size: 16px;
+}
 
-h1, h2, h3, h4 { line-height: 1.35; letter-spacing: -0.01em; }
-h1 { font-size: 30px; margin: 6px 0 6px; }
-h2 { font-size: 22px; margin: 46px 0 14px; padding-top: 10px; border-top: 1px solid var(--border); }
-h3 { font-size: 18px; margin: 30px 0 10px; color: var(--accent-text); }
-h4 { font-size: 15px; margin: 20px 0 8px; }
+@media (width <= 900px) {
+  #menu-btn { display: block; }
+  #sidebar {
+    position: fixed; z-index: 39; inset: 0 auto auto 0;
+    padding-top: 62px;
+    transform: translateX(-102%); transition: transform .22s ease;
+    box-shadow: 0 0 40px rgb(0 0 0 / .28);
+
+    body.nav-open & { transform: none; }
+  }
+  main { padding: 68px 20px 80px; }
+}
+
+/* ---------------- 排版 ---------------- */
+
+h1, h2, h3, h4 { line-height: 1.35; color: var(--fg); }
+h1 { font-size: 30px; margin: 0 0 6px; letter-spacing: -.01em; }
+h2 {
+  font-size: 22px; margin: 52px 0 14px; padding-top: 10px;
+  border-top: 1px solid var(--line);
+
+  &:first-of-type { border-top: none; }
+}
+h3 { font-size: 17.5px; margin: 30px 0 8px; }
+h4 { font-size: 15.5px; margin: 22px 0 6px; color: var(--fg-soft); }
 p { margin: 12px 0; }
-ul, ol { padding-left: 22px; }
-li { margin: 6px 0; }
-a { color: var(--accent-text); }
+ul, ol { padding-left: 1.5em; margin: 12px 0; }
+li { margin: 5px 0; }
+li > :is(ul, ol) { margin: 4px 0; }
+a { color: var(--accent-2); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+hr { border: none; border-top: 1px solid var(--line); margin: 36px 0; }
+:is(strong, b) { font-weight: 700; color: var(--fg); }
 
-.kicker {
-  display: inline-block;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  color: var(--accent-text);
-  background: var(--accent-dim);
-  padding: 3px 10px;
-  border-radius: 999px;
-  margin-bottom: 10px;
+code {
+  font-family: var(--mono); font-size: .875em;
+  background: var(--panel-2); border: 1px solid var(--line);
+  padding: .08em .35em; border-radius: 5px;
+  word-break: break-word;
 }
+pre code { all: unset; font-family: var(--mono); }
 
-.subtitle { color: var(--text-dim); font-size: 16px; margin-top: 0; }
+.chapter-eyebrow {
+  display: inline-block; font-size: 12px; letter-spacing: .14em;
+  text-transform: uppercase; font-weight: 700; color: var(--accent);
+  background: var(--accent-bg); padding: 3px 10px; border-radius: 20px;
+  margin-bottom: 14px;
+}
+.lede { font-size: 17.5px; color: var(--fg-soft); margin: 10px 0 26px; }
 
-.covers {
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px 20px;
-  margin: 20px 0 8px;
-  box-shadow: var(--shadow);
-}
-.covers h4 { margin-top: 0; color: var(--text-dim); font-weight: 600; }
-.covers ul { margin: 6px 0 0; }
+/* ---------------- 代码块 ---------------- */
 
-/* ---- callouts ---- */
-.callout {
-  border-radius: var(--radius);
-  padding: 14px 18px;
-  margin: 18px 0;
-  border: 1px solid var(--border);
-  background: var(--bg-panel);
-}
-.callout > .label {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  margin-bottom: 6px;
-  display: block;
-}
-.callout.tip { background: var(--good-bg); border-color: var(--good); }
-.callout.tip > .label { color: var(--good); }
-.callout.warn { background: var(--warn-bg); border-color: var(--warn); }
-.callout.warn > .label { color: var(--warn); }
-.callout.modern { background: var(--accent-dim); border-color: var(--accent); }
-.callout.modern > .label { color: var(--accent-text); }
-.callout p:first-child { margin-top: 0; }
-.callout p:last-child { margin-bottom: 0; }
-
-/* ---- old vs new version compare table ---- */
-.versus {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin: 16px 0;
-}
-@media (max-width: 620px) { .versus { grid-template-columns: 1fr; } }
-.versus .col {
-  border-radius: var(--radius);
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-}
-.versus .old { background: var(--old-bg); }
-.versus .new { background: var(--new-bg); }
-.versus .col .tag {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-.versus .old .tag { color: var(--old); }
-.versus .new .tag { color: var(--new); }
-.versus .col ul { margin: 8px 0 0; padding-left: 18px; font-size: 14px; }
-
-/* ---- code blocks ---- */
 .code {
+  --code-muted: #b9b0a3;
+  margin: 18px 0;
   border-radius: var(--radius);
   overflow: hidden;
-  margin: 16px 0;
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow);
-}
-.code .file {
-  background: var(--bg-code-header);
-  color: var(--text-dim);
-  font-size: 12px;
-  padding: 7px 14px;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  border-bottom: 1px solid var(--border);
-}
-.code pre {
-  margin: 0;
-  padding: 14px 16px;
-  background: var(--bg-code);
-  overflow-x: auto;
-}
-.code code, pre code {
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  font-size: 13.2px;
-  white-space: pre;
-}
-code.inline {
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  background: var(--bg-code);
-  border: 1px solid var(--border);
-  padding: 1px 6px;
-  border-radius: 6px;
-  font-size: 0.9em;
-}
-.tok-kw { color: #8250df; }
-.tok-ann { color: #966600; font-weight: 600; }
-@media (prefers-color-scheme: dark) { .tok-ann { color: #eab766; } .tok-kw { color: #c9a8ff; } }
-.tok-str { color: #0a7d4b; }
-@media (prefers-color-scheme: dark) { .tok-str { color: #7ee2ae; } }
-.tok-cm { color: var(--text-dim); font-style: italic; }
-.tok-type { color: #0550ae; }
-@media (prefers-color-scheme: dark) { .tok-type { color: #8ab4f8; } }
+  border: 1px solid var(--line-2);
+  background: var(--code-bg);
 
-/* ---- diagrams ---- */
-.diagram {
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px;
-  margin: 20px 0;
-  box-shadow: var(--shadow);
-  overflow-x: auto;
-}
-.diagram svg { display: block; margin: 0 auto; max-width: 100%; height: auto; }
-.diagram .caption {
-  text-align: center;
-  font-size: 12.5px;
-  color: var(--text-dim);
-  margin-top: 10px;
-}
-.diagram text { fill: var(--text); font-family: -apple-system, "PingFang SC", "Noto Sans SC", sans-serif; }
-.diagram .dim { fill: var(--text-dim); }
-.diagram .box { fill: var(--bg-code); stroke: var(--border); }
-.diagram .accentbox { fill: var(--accent-dim); stroke: var(--accent); }
-.diagram .oldbox { fill: var(--old-bg); stroke: var(--old); }
-.diagram .newbox { fill: var(--new-bg); stroke: var(--new); }
-.diagram .arrow { stroke: var(--text-dim); stroke-width: 1.6; fill: none; marker-end: url(#arrow); }
-.diagram .arrow-accent { stroke: var(--accent); stroke-width: 2; fill: none; marker-end: url(#arrowAccent); }
+  > .bar {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 6px 12px;
+    background: rgb(255 255 255 / .05);
+    border-bottom: 1px solid rgb(255 255 255 / .08);
+    font-family: var(--mono); font-size: 11.5px;
+    color: var(--code-muted); letter-spacing: .03em;
 
-table.tbl { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; }
-table.tbl th, table.tbl td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
-table.tbl th { background: var(--bg-code-header); }
+    .tag { color: #d8b48a; font-weight: 600; }
+  }
 
+  pre {
+    margin: 0; padding: 14px 16px; overflow-x: auto;
+    color: var(--code-fg); font-family: var(--mono);
+    font-size: 13.2px; line-height: 1.72;
+    tab-size: 2;
+  }
+
+  .copy {
+    flex: none;
+    border: 1px solid rgb(255 255 255 / .16); background: transparent;
+    color: var(--code-muted); border-radius: 5px; font-size: 11px;
+    padding: 2px 8px; cursor: pointer; font-family: var(--sans);
+
+    &:hover { color: #fff; border-color: rgb(255 255 255 / .4); }
+  }
+}
+
+/* 语法高亮（代码块背景在深浅两种主题下都是深色） */
+.tok-cm   { color: #7f7568; font-style: italic; }
+.tok-str  { color: #b4d68a; }
+.tok-kw   { color: #ff9d5c; }
+.tok-ann  { color: #d7a3e6; }
+.tok-type { color: #e8c07d; }
+
+/* ---------------- 提示块 ---------------- */
+
+/* 各变体只设置颜色变量；没设置时回落到中性的边框和面板色 */
+.box {
+  margin: 20px 0; padding: 14px 18px 14px 16px;
+  border-left: 4px solid var(--box-c, var(--line-2));
+  background: var(--box-bg, var(--panel));
+  border-radius: 0 var(--radius) var(--radius) 0;
+
+  > .t {
+    font-weight: 700; font-size: 14px; margin-bottom: 4px;
+    display: flex; align-items: center; gap: 7px;
+    color: var(--box-t, var(--box-c, currentColor));
+  }
+  p:first-of-type { margin-top: 0; }
+  :is(p, ul, ol):last-child { margin-bottom: 0; }
+
+  &.note { --box-c: var(--blue);   --box-bg: var(--blue-bg); }
+  &.tip  { --box-c: var(--green);  --box-bg: var(--green-bg); }
+  &.warn { --box-c: var(--red);    --box-bg: var(--red-bg); }
+  &.key  { --box-c: var(--accent); --box-bg: var(--accent-bg); --box-t: var(--accent-2); }
+  &.deep { --box-c: var(--purple); --box-bg: var(--purple-bg); }
+}
+
+/* 学习目标 */
+.goals {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 16px 20px; margin: 22px 0 28px;
+
+  h4 { margin: 0 0 8px; color: var(--accent-2); font-size: 14px; letter-spacing: .04em; }
+  ul { margin: 0; }
+}
+
+/* 章节内目录 */
+.toc {
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 12px 18px; margin: 0 0 30px;
+  font-size: 14.5px;
+
+  .h {
+    font-weight: 700; font-size: 12px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--fg-faint); margin-bottom: 6px;
+  }
+  ol { margin: 0; padding-left: 1.3em; }
+  a {
+    color: var(--fg-soft); text-decoration: none;
+    &:hover { color: var(--accent-2); text-decoration: underline; }
+  }
+}
+
+/* ---------------- 表格 ---------------- */
+
+.tw { overflow-x: auto; margin: 20px 0; }
+table {
+  border-collapse: collapse; width: 100%; font-size: 14.5px;
+  background: var(--panel); border-radius: var(--radius); overflow: hidden;
+}
+th, td { padding: 9px 13px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { background: var(--panel-2); font-weight: 700; font-size: 13.5px; white-space: nowrap; }
+tr:last-child td { border-bottom: none; }
+td code { font-size: .86em; }
+
+/* ---------------- 图示 ---------------- */
+
+figure { margin: 26px 0; overflow-x: auto; }
+figure svg { display: block; width: 100%; height: auto; }
+figcaption {
+  margin-top: 8px; font-size: 13px; color: var(--fg-faint); text-align: center;
+}
+
+/* 图里的元素常带自己的 fill / font-size 属性；CSS 会压过这些属性，
+   所以只给没写属性的元素兜底。 */
+.dgm {
+  color: var(--fg-faint);            /* 箭头 marker 用 currentColor */
+
+  :is(.bx, .bx-a, .bx-b, .bx-g, .bx-p, .bx-r, .bx-d) { stroke-width: 1.5; }
+  .bx    { fill: var(--panel);     stroke: var(--line-2); }
+  .bx-a  { fill: var(--accent-bg); stroke: var(--accent); }
+  .bx-b  { fill: var(--blue-bg);   stroke: var(--blue); }
+  .bx-g  { fill: var(--green-bg);  stroke: var(--green); }
+  .bx-p  { fill: var(--purple-bg); stroke: var(--purple); }
+  .bx-r  { fill: var(--red-bg);    stroke: var(--red); }
+  .bx-d  { fill: var(--panel-2);   stroke: var(--line-2); stroke-dasharray: 5 4; }
+
+  :is(.ln, .ln-a, .ln-g, .ln-r) { fill: none; }
+  .ln    { stroke: var(--fg-faint); stroke-width: 1.6; }
+  :is(.ln-a, .ln-g, .ln-r) { stroke-width: 1.8; }
+  .ln-a  { stroke: var(--accent); }
+  .ln-g  { stroke: var(--green); }
+  .ln-r  { stroke: var(--red); }
+
+  text:not([font-family]) { font-family: var(--sans); }
+  text:not([fill])        { fill: var(--fg); }
+  .dim:not([fill])        { fill: var(--fg-soft); }
+}
+
+/* ---------------- 对照卡片 ---------------- */
+
+.vs {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 20px 0;
+
+  @media (width <= 700px) { grid-template-columns: 1fr; }
+
+  > div {
+    border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--panel);
+    > .h { padding: 7px 14px; font-size: 12.5px; font-weight: 700; border-bottom: 1px solid var(--line); }
+    > ul { margin: 10px 14px 12px; padding-left: 1.2em; font-size: 14px; }
+    > pre {
+      margin: 0; padding: 12px 14px; overflow-x: auto;
+      font-family: var(--mono); font-size: 12.5px; line-height: 1.65; white-space: pre-wrap;
+    }
+  }
+  .old > .h { background: var(--panel-2); color: var(--fg-faint); }
+  .new > .h { background: var(--accent-bg); color: var(--accent-2); }
+}
+
+/* 练习 */
 .exercise {
-  background: var(--bg-panel);
-  border: 1px dashed var(--accent);
-  border-radius: var(--radius);
-  padding: 14px 18px;
-  margin: 18px 0;
-}
-.exercise .label { color: var(--accent-text); font-weight: 700; font-size: 13px; }
+  border: 1px dashed var(--accent); background: var(--accent-bg);
+  border-radius: var(--radius); padding: 16px 20px; margin: 30px 0 0;
 
-.quiz { list-style: none; padding-left: 0; }
-.quiz li {
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 10px 14px;
-  margin: 8px 0;
+  h3 { margin: 0 0 8px; color: var(--accent-2); font-size: 16px; }
+  :is(p, ol, ul):last-child { margin-bottom: 0; }
 }
-.quiz .q { font-weight: 600; }
-.quiz .a { color: var(--text-dim); margin-top: 6px; font-size: 14px; display: none; }
-.quiz li.open .a { display: block; }
-.quiz .q::before { content: "▸ "; color: var(--accent); }
 
-.pagenav {
-  display: flex;
-  justify-content: space-between;
-  gap: 14px;
-  margin-top: 56px;
-  padding-top: 20px;
-  border-top: 1px solid var(--border);
-  font-size: 14px;
-}
-.pagenav a {
-  text-decoration: none;
-  color: var(--text);
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 10px 16px;
-  flex: 1;
-  box-shadow: var(--shadow);
-}
-.pagenav a:hover { border-color: var(--accent); }
-.pagenav .lbl { display: block; font-size: 11px; color: var(--text-dim); margin-bottom: 2px; }
-.pagenav .next { text-align: right; }
+/* 自测题：点击题目展开答案 */
+.quiz {
+  list-style: none; padding-left: 0;
 
-.toc-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 14px;
-  margin: 22px 0;
+  > li {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 11px 16px; margin: 10px 0;
+    cursor: pointer;
+
+    &:hover { border-color: var(--accent); }
+    &::before {
+      content: "▸"; display: inline-block; width: 1.1em;
+      color: var(--accent); transition: transform .15s ease;
+    }
+    &.open::before { transform: rotate(90deg); }
+  }
+  .q { font-weight: 600; }
+  .a {
+    display: none; cursor: auto;
+    margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line);
+    color: var(--fg-soft); font-size: 14.5px; font-weight: 400;
+  }
+  li.open .a { display: block; }
 }
+
+/* 章节导航 */
+.pager {
+  display: flex; gap: 12px; margin-top: 54px; padding-top: 22px; border-top: 1px solid var(--line);
+
+  a {
+    flex: 1 1 0; padding: 12px 16px; border: 1px solid var(--line);
+    border-radius: var(--radius); background: var(--panel);
+    text-decoration: none; color: var(--fg); font-size: 14px;
+
+    &:hover { border-color: var(--accent); }
+    span { display: block; font-size: 11.5px; color: var(--fg-faint); margin-bottom: 2px; }
+    &.next { text-align: right; }
+  }
+}
+
+/* 首页 */
+.hero {
+  border: 1px solid var(--line); background: var(--panel);
+  border-radius: 16px; padding: 34px 34px 30px; margin-bottom: 30px;
+
+  h1 { font-size: 34px; }
+  .sub { font-size: 18px; color: var(--fg-soft); margin: 8px 0 0; }
+
+  @media (width <= 700px) { padding: 24px 20px; h1 { font-size: 28px; } }
+}
+.pill {
+  display: inline-block; font-size: 12px; padding: 3px 10px; border-radius: 20px;
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--fg-soft);
+  margin: 3px 5px 3px 0;
+}
+.toc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 .toc-card {
-  display: block;
-  text-decoration: none;
-  color: var(--text);
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px 18px;
-  box-shadow: var(--shadow);
-  transition: transform 0.12s ease, border-color 0.12s ease;
+  display: block; text-decoration: none; color: inherit;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 13px 16px;
+
+  &:hover { border-color: var(--accent); background: var(--accent-bg); }
+  .n { font-size: 11px; letter-spacing: .1em; color: var(--accent); font-weight: 700; }
+  .t { font-weight: 700; font-size: 15.5px; margin: 2px 0 3px; }
+  .d { font-size: 13.5px; color: var(--fg-soft); line-height: 1.6; }
 }
-.toc-card:hover { transform: translateY(-2px); border-color: var(--accent); }
-.toc-card .num { font-size: 12px; color: var(--accent-text); font-weight: 700; }
-.toc-card .ttl { font-size: 16px; font-weight: 700; margin: 4px 0 6px; }
-.toc-card .desc { font-size: 13px; color: var(--text-dim); }
-.toc-part {
-  margin: 34px 0 6px;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: var(--text-dim);
-  text-transform: uppercase;
-}
+.note-small { margin-top: 40px; font-size: 13px; color: var(--fg-faint); }
 </style>
 </head>
-<body>
-<div class="topbar">
-  <a href="index.html">&larr; 全部章节</a>
-  <span>AspectJ in Action · 图解笔记</span>
-</div>
-<div class="page">
+<body data-page="ch03">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><marker id="ar-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--accent)"/></marker><marker id="ar-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--green)"/></marker><marker id="ar-r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--red)"/></marker></defs></svg>
+<div id="app">
+<aside id="sidebar"></aside>
+<main>
 
-  <span class="kicker">CHAPTER 03</span>
+  <span class="chapter-eyebrow">第 3 章</span>
   <h1>理解连接点模型</h1>
-  <p class="subtitle">一句话概括本章：先搞懂 AspectJ 到底能在程序的“哪些时刻”插手做事（连接点），再学会用切点表达式精确挑出你想要的那些时刻。</p>
+  <p class="lede">一句话概括本章：先搞懂 AspectJ 到底能在程序的“哪些时刻”插手做事（连接点），再学会用切点表达式精确挑出你想要的那些时刻。</p>
 
-  <div class="covers">
+  <div class="goals">
     <h4>本章你将学到</h4>
     <ul>
       <li>连接点（join point）到底是什么，AspectJ 只暴露哪些种类的连接点</li>
-      <li>新手最容易搞混的一对概念：<code class="inline">call</code>（调用处）vs. <code class="inline">execution</code>（执行体）</li>
-      <li>切点（pointcut）的签名语法：通配符 <code class="inline">*</code>、<code class="inline">..</code>、<code class="inline">+</code> 怎么用</li>
+      <li>新手最容易搞混的一对概念：<code>call</code>（调用处）vs. <code>execution</code>（执行体）</li>
+      <li>切点（pointcut）的签名语法：通配符 <code>*</code>、<code>..</code>、<code>+</code> 怎么用</li>
       <li>用真实的追踪切面，看懂一段程序执行时到底产生了哪些连接点</li>
     </ul>
   </div>
+
+  <div id="chapter-toc"></div>
 
   <h2>1. 连接点：程序执行中的“可插手时刻”</h2>
   <p>
@@ -352,130 +460,127 @@ table.tbl th { background: var(--bg-code-header); }
     但 AspectJ 并不会把<em>所有</em>瞬间都开放给你，它只精心挑选了一小部分“稳定、有意义”的瞬间对外暴露——这样你写出来的切面才不会因为一次不相关的重构（比如把一行代码拆成两行）就莫名其妙失效。
   </p>
 
-  <div class="callout tip">
-    <span class="label">💡 类比</span>
+  <div class="box tip">
+    <div class="t">💡 类比</div>
     <p>连接点有点像 PowerPoint 里的“动画触发点”——它不是画面上任意一个像素，而是“某个对象出现”“某次点击”这种被明确定义、可以挂动画的时刻。AspectJ 的连接点也是同理：只在明确定义的程序时刻才能挂上你的逻辑。</p>
   </div>
 
   <h2>2. 最容易踩坑的一对概念：call vs. execution</h2>
   <p>
-    书里用一个记账系统举例：<code class="inline">AccountService</code> 调用 <code class="inline">Account.debit()</code>。这里其实藏着<strong>两个不同的连接点</strong>：
+    书里用一个记账系统举例：<code>AccountService</code> 调用 <code>Account.debit()</code>。这里其实藏着<strong>两个不同的连接点</strong>：
   </p>
   <ul>
     <li><strong>call 连接点</strong>：发生在<em>调用方</em>那一行代码——“我要调用 debit() 了”。</li>
     <li><strong>execution 连接点</strong>：发生在<em>被调用方</em>——debit() 方法体真正跑起来的那段过程。</li>
   </ul>
-  <p>用本仓库 <code class="inline">ch03</code> 的真实例子来看会更直观：<code class="inline">Main.main()</code> 里执行了 <code class="inline">new Order().getTotalPrice()</code>。</p>
+  <p>用本仓库 <code>ch03</code> 的真实例子来看会更直观：<code>Main.main()</code> 里执行了 <code>new Order().getTotalPrice()</code>。</p>
 
-  <div class="diagram">
-    <svg viewBox="0 0 640 260" xmlns="http://www.w3.org/2000/svg">
+  <figure><svg class="dgm" viewBox="0 0 640 260" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <marker id="arrow-ch03-1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
           <path d="M0,0 L6,3 L0,6 Z" fill="currentColor"/>
         </marker>
       </defs>
-      <rect class="box" x="30" y="30" width="190" height="56" rx="10"/>
+      <rect class="bx" x="30" y="30" width="190" height="56" rx="10"/>
       <text x="125" y="63" text-anchor="middle" font-size="14">Main.main()</text>
 
-      <rect class="box" x="420" y="150" width="190" height="70" rx="10"/>
+      <rect class="bx" x="420" y="150" width="190" height="70" rx="10"/>
       <text x="515" y="180" text-anchor="middle" font-size="14">Order.getTotalPrice()</text>
       <text x="515" y="198" text-anchor="middle" font-size="12" class="dim">方法体内部逻辑</text>
 
-      <path class="arrow" d="M180,86 C 250,120 350,120 425,150" style="color:var(--text-dim)" marker-end="url(#arrow-ch03-1)"/>
+      <path class="ln" d="M180,86 C 250,120 350,120 425,150" marker-end="url(#arrow-ch03-1)"/>
 
-      <circle cx="200" cy="98" r="5" fill="var(--old)"/>
-      <text x="212" y="102" font-size="12.5" fill="var(--old)">① call 连接点（在 Main 这一侧：“发起调用”这一刻）</text>
+      <circle cx="200" cy="98" r="5" fill="var(--red)"/>
+      <text x="212" y="102" font-size="12.5" fill="var(--red)">① call 连接点（在 Main 这一侧：“发起调用”这一刻）</text>
 
-      <rect x="420" y="150" width="190" height="70" rx="10" fill="none" stroke="var(--new)" stroke-width="2.5" stroke-dasharray="5,3"/>
-      <text x="515" y="238" text-anchor="middle" font-size="12.5" fill="var(--new)">② execution 连接点（在 Order 这一侧：整个方法体的执行过程）</text>
+      <rect x="420" y="150" width="190" height="70" rx="10" fill="none" stroke="var(--green)" stroke-width="2.5" stroke-dasharray="5,3"/>
+      <text x="515" y="238" text-anchor="middle" font-size="12.5" fill="var(--green)">② execution 连接点（在 Order 这一侧：整个方法体的执行过程）</text>
     </svg>
-    <div class="caption">图 3-1　同一次方法调用，caller 端和 callee 端各有一个连接点——它们不是同一个东西</div>
-  </div>
+    <figcaption>图 3-1　同一次方法调用，caller 端和 callee 端各有一个连接点——它们不是同一个东西</figcaption>
+  </figure>
 
-  <div class="callout warn">
-    <span class="label">⚠️ 新手常见错误</span>
+  <div class="box warn">
+    <div class="t">⚠️ 新手常见错误</div>
     <p>
-      如果你想在 <code class="inline">Order</code> 类里插入逻辑（比如记录“这个方法被执行了多久”），要用 <code class="inline">execution()</code>；
-      如果你只想在<em>调用方</em>那里做点手脚（比如统计“Main 一共调用了几次这个方法”），才用 <code class="inline">call()</code>。
-      两者织入（weave）的位置完全不同：<code class="inline">execution</code> 把逻辑织进 <code class="inline">Order</code> 类本身，<code class="inline">call</code> 把逻辑织进每一个调用它的地方。
+      如果你想在 <code>Order</code> 类里插入逻辑（比如记录“这个方法被执行了多久”），要用 <code>execution()</code>；
+      如果你只想在<em>调用方</em>那里做点手脚（比如统计“Main 一共调用了几次这个方法”），才用 <code>call()</code>。
+      两者织入（weave）的位置完全不同：<code>execution</code> 把逻辑织进 <code>Order</code> 类本身，<code>call</code> 把逻辑织进每一个调用它的地方。
     </p>
   </div>
 
   <h2>3. AspectJ 暴露的连接点种类一览</h2>
   <p>下面这些就是 AspectJ 精心挑选、对外开放的全部“可插手时刻”：</p>
 
-  <div class="diagram">
-    <svg viewBox="0 0 640 210" xmlns="http://www.w3.org/2000/svg">
+  <figure><svg class="dgm" viewBox="0 0 640 210" xmlns="http://www.w3.org/2000/svg">
       <g font-size="12.5" text-anchor="middle">
-        <rect class="box" x="10"  y="10" width="140" height="50" rx="8"/><text x="80" y="30">方法</text><text x="80" y="46" class="dim">call / execution</text>
-        <rect class="box" x="165" y="10" width="140" height="50" rx="8"/><text x="235" y="30">构造器</text><text x="235" y="46" class="dim">call / execution</text>
-        <rect class="box" x="320" y="10" width="140" height="50" rx="8"/><text x="390" y="30">字段访问</text><text x="390" y="46" class="dim">get / set</text>
-        <rect class="box" x="475" y="10" width="140" height="50" rx="8"/><text x="545" y="30">异常处理</text><text x="545" y="46" class="dim">catch 块 handler</text>
+        <rect class="bx" x="10"  y="10" width="140" height="50" rx="8"/><text x="80" y="30">方法</text><text x="80" y="46" class="dim">call / execution</text>
+        <rect class="bx" x="165" y="10" width="140" height="50" rx="8"/><text x="235" y="30">构造器</text><text x="235" y="46" class="dim">call / execution</text>
+        <rect class="bx" x="320" y="10" width="140" height="50" rx="8"/><text x="390" y="30">字段访问</text><text x="390" y="46" class="dim">get / set</text>
+        <rect class="bx" x="475" y="10" width="140" height="50" rx="8"/><text x="545" y="30">异常处理</text><text x="545" y="46" class="dim">catch 块 handler</text>
 
-        <rect class="box" x="10"  y="80" width="140" height="50" rx="8"/><text x="80" y="100">类初始化</text><text x="80" y="116" class="dim">staticinitialization</text>
-        <rect class="box" x="165" y="80" width="140" height="50" rx="8"/><text x="235" y="100">对象初始化</text><text x="235" y="116" class="dim">initialization</text>
-        <rect class="box" x="320" y="80" width="140" height="50" rx="8"/><text x="390" y="100">对象预初始化</text><text x="390" y="116" class="dim">preinitialization</text>
-        <rect class="accentbox" x="475" y="80" width="140" height="50" rx="8"/><text x="545" y="100">通知执行</text><text x="545" y="116" class="dim">adviceexecution</text>
+        <rect class="bx" x="10"  y="80" width="140" height="50" rx="8"/><text x="80" y="100">类初始化</text><text x="80" y="116" class="dim">staticinitialization</text>
+        <rect class="bx" x="165" y="80" width="140" height="50" rx="8"/><text x="235" y="100">对象初始化</text><text x="235" y="116" class="dim">initialization</text>
+        <rect class="bx" x="320" y="80" width="140" height="50" rx="8"/><text x="390" y="100">对象预初始化</text><text x="390" y="116" class="dim">preinitialization</text>
+        <rect class="bx-a" x="475" y="80" width="140" height="50" rx="8"/><text x="545" y="100">通知执行</text><text x="545" y="116" class="dim">adviceexecution</text>
       </g>
       <text x="320" y="160" text-anchor="middle" font-size="12.5" class="dim">↑ 前三行是“Java 本来就有的时刻”；右下角这个是 AspectJ 自己额外开放的（通知本身执行也是一个连接点）</text>
     </svg>
-    <div class="caption">图 3-2　AspectJ 暴露的连接点分类（表 3.1 的图解版）</div>
-  </div>
+    <figcaption>图 3-2　AspectJ 暴露的连接点分类（表 3.1 的图解版）</figcaption>
+  </figure>
 
-  <table class="tbl">
+  <div class="tw"><table>
     <tr><th>连接点种类</th><th>对应切点关键字</th><th>选中的是什么</th></tr>
-    <tr><td>方法执行</td><td><code class="inline">execution(方法签名)</code></td><td>方法体内部</td></tr>
-    <tr><td>方法调用</td><td><code class="inline">call(方法签名)</code></td><td>调用该方法的那一行代码</td></tr>
-    <tr><td>字段读取 / 写入</td><td><code class="inline">get(字段签名)</code> / <code class="inline">set(字段签名)</code></td><td>读 / 写某个字段的那一刻</td></tr>
-    <tr><td>异常处理</td><td><code class="inline">handler(异常类型)</code></td><td>catch 块内部</td></tr>
-    <tr><td>类初始化</td><td><code class="inline">staticinitialization(类型)</code></td><td>类首次加载时的静态代码块</td></tr>
-  </table>
+    <tr><td>方法执行</td><td><code>execution(方法签名)</code></td><td>方法体内部</td></tr>
+    <tr><td>方法调用</td><td><code>call(方法签名)</code></td><td>调用该方法的那一行代码</td></tr>
+    <tr><td>字段读取 / 写入</td><td><code>get(字段签名)</code> / <code>set(字段签名)</code></td><td>读 / 写某个字段的那一刻</td></tr>
+    <tr><td>异常处理</td><td><code>handler(异常类型)</code></td><td>catch 块内部</td></tr>
+    <tr><td>类初始化</td><td><code>staticinitialization(类型)</code></td><td>类首次加载时的静态代码块</td></tr>
+  </table></div>
 
   <h2>4. 切点：怎么“挑出”想要的连接点</h2>
   <p>
     知道了连接点长什么样，下一步就是学会写<strong>切点表达式（pointcut）</strong>去精确地把它们选出来。
     切点表达式的核心，是对 Java 元素“签名”做模式匹配，AspectJ 提供三个通配符：
   </p>
-  <table class="tbl">
+  <div class="tw"><table>
     <tr><th>通配符</th><th>含义</th><th>例子</th></tr>
-    <tr><td><code class="inline">*</code></td><td>匹配任意一段名字（不跨包，不含点）</td><td><code class="inline">*Account</code> 匹配 <code class="inline">SavingsAccount</code></td></tr>
-    <tr><td><code class="inline">..</code></td><td>匹配任意多段（含点）——用在包名表示“所有子包”，用在参数列表表示“任意个数、任意类型参数”</td><td><code class="inline">com.shop..*</code>、<code class="inline">place(..)</code></td></tr>
-    <tr><td><code class="inline">+</code></td><td>匹配某类型及其所有子类型</td><td><code class="inline">Order+</code> 匹配 <code class="inline">Order</code> 及其子类</td></tr>
-  </table>
+    <tr><td><code>*</code></td><td>匹配任意一段名字（不跨包，不含点）</td><td><code>*Account</code> 匹配 <code>SavingsAccount</code></td></tr>
+    <tr><td><code>..</code></td><td>匹配任意多段（含点）——用在包名表示“所有子包”，用在参数列表表示“任意个数、任意类型参数”</td><td><code>com.shop..*</code>、<code>place(..)</code></td></tr>
+    <tr><td><code>+</code></td><td>匹配某类型及其所有子类型</td><td><code>Order+</code> 匹配 <code>Order</code> 及其子类</td></tr>
+  </table></div>
 
-  <div class="diagram">
-    <svg viewBox="0 0 640 190" xmlns="http://www.w3.org/2000/svg">
+  <figure><svg class="dgm" viewBox="0 0 640 190" xmlns="http://www.w3.org/2000/svg">
       <text x="20" y="40" font-family="SFMono-Regular,Consolas,monospace" font-size="16">execution( public&#160;&#160; *&#160;&#160;&#160; Order.place(..) )</text>
 
-      <line x1="55" y1="52" x2="55" y2="70" class="arrow" style="color:var(--text-dim)" marker-end="none" stroke-dasharray="3,3"/>
+      <line x1="55" y1="52" x2="55" y2="70" class="ln" marker-end="none" stroke-dasharray="3,3"/>
       <text x="55" y="86" text-anchor="middle" font-size="12" class="dim">切点<tspan x="55" dy="14">类型</tspan></text>
 
-      <line x1="150" y1="52" x2="150" y2="70" stroke="var(--text-dim)" stroke-dasharray="3,3"/>
+      <line x1="150" y1="52" x2="150" y2="70" stroke="var(--fg-soft)" stroke-dasharray="3,3"/>
       <text x="150" y="86" text-anchor="middle" font-size="12" class="dim">修饰符<tspan x="150" dy="14">（可省略）</tspan></text>
 
-      <line x1="215" y1="52" x2="215" y2="70" stroke="var(--text-dim)" stroke-dasharray="3,3"/>
+      <line x1="215" y1="52" x2="215" y2="70" stroke="var(--fg-soft)" stroke-dasharray="3,3"/>
       <text x="215" y="86" text-anchor="middle" font-size="12" class="dim">返回类型<tspan x="215" dy="14">（* = 任意）</tspan></text>
 
       <line x1="280" y1="52" x2="280" y2="70" stroke="var(--accent)" stroke-dasharray="3,3"/>
-      <text x="280" y="86" text-anchor="middle" font-size="12" fill="var(--accent-text)">声明类型<tspan x="280" dy="14">Order</tspan></text>
+      <text x="280" y="86" text-anchor="middle" font-size="12" fill="var(--accent-2)">声明类型<tspan x="280" dy="14">Order</tspan></text>
 
       <line x1="345" y1="52" x2="345" y2="70" stroke="var(--accent)" stroke-dasharray="3,3"/>
-      <text x="345" y="86" text-anchor="middle" font-size="12" fill="var(--accent-text)">方法名<tspan x="345" dy="14">place</tspan></text>
+      <text x="345" y="86" text-anchor="middle" font-size="12" fill="var(--accent-2)">方法名<tspan x="345" dy="14">place</tspan></text>
 
-      <line x1="400" y1="52" x2="400" y2="70" stroke="var(--text-dim)" stroke-dasharray="3,3"/>
+      <line x1="400" y1="52" x2="400" y2="70" stroke="var(--fg-soft)" stroke-dasharray="3,3"/>
       <text x="400" y="86" text-anchor="middle" font-size="12" class="dim">参数<tspan x="400" dy="14">(.. = 任意)</tspan></text>
 
       <text x="320" y="140" text-anchor="middle" font-size="13" class="dim">含义：Order 类中，名字叫 place、public、返回任意类型、参数任意的方法——被“执行”的那一刻</text>
     </svg>
-    <div class="caption">图 3-3　拆解一个切点表达式：<code>execution(public * Order.place(..))</code></div>
-  </div>
+    <figcaption>图 3-3　拆解一个切点表达式：<code>execution(public * Order.place(..))</code></figcaption>
+  </figure>
 
   <h2>5. 用真实追踪切面看懂输出</h2>
   <p>
-    仓库里 <code class="inline">ch03/workspace/Section3.3JoinPointDemonstrationExample</code> 有一个很好的教学例子：<code class="inline">JoinPointTraceAspect</code> 会打印<em>所有</em>发生在它自己之外的连接点。
+    仓库里 <code>ch03/workspace/Section3.3JoinPointDemonstrationExample</code> 有一个很好的教学例子：<code>JoinPointTraceAspect</code> 会打印<em>所有</em>发生在它自己之外的连接点。
   </p>
   <div class="code">
-    <div class="file">ajia/tracing/JoinPointTraceAspect.aj（书中原版，传统语法）</div>
+    <div class="bar"><span class="tag">ajia/tracing/JoinPointTraceAspect.aj（书中原版，传统语法）</span></div>
     <pre><code><span class="tok-kw">public aspect</span> JoinPointTraceAspect {
     <span class="tok-kw">private int</span> callDepth;
 
@@ -492,9 +597,9 @@ table.tbl th { background: var(--bg-code-header); }
     <span class="tok-cm">// print(...) 用 callDepth 控制缩进，方便肉眼看出调用层级</span>
 }</code></pre>
   </div>
-  <p>运行 <code class="inline">Main</code>（只是 <code class="inline">new Order().getTotalPrice()</code>）后，你会看到类似这样的输出（节选）：</p>
+  <p>运行 <code>Main</code>（只是 <code>new Order().getTotalPrice()</code>）后，你会看到类似这样的输出（节选）：</p>
   <div class="code">
-    <div class="file">运行输出（节选）</div>
+    <div class="bar"><span class="tag">运行输出（节选）</span></div>
     <pre><code>Before: execution(void ajia.main.Main.main(String[]))
   Before: call(ajia.domain.Order())
     Before: initialization(ajia.domain.Order())
@@ -515,30 +620,30 @@ table.tbl th { background: var(--bg-code-header); }
 After: execution(void ajia.main.Main.main(String[]))</code></pre>
   </div>
   <p>
-    注意看：<code class="inline">call(ajia.domain.Order())</code>（在 Main 里发起的构造调用）和它内部展开的
-    <code class="inline">initialization(...)</code> / <code class="inline">execution(...)</code> 是层层嵌套的——这正好印证了第 2 节说的“call 和 execution 是两个不同、但相关的连接点”。
-    <code class="inline">set(Collection ajia.domain.Order.lineItems)</code> 这一行，则是 <code class="inline">Order</code> 构造函数里给字段赋初值时触发的字段写入连接点。
+    注意看：<code>call(ajia.domain.Order())</code>（在 Main 里发起的构造调用）和它内部展开的
+    <code>initialization(...)</code> / <code>execution(...)</code> 是层层嵌套的——这正好印证了第 2 节说的“call 和 execution 是两个不同、但相关的连接点”。
+    <code>set(Collection ajia.domain.Order.lineItems)</code> 这一行，则是 <code>Order</code> 构造函数里给字段赋初值时触发的字段写入连接点。
   </p>
 
-  <div class="versus">
-    <div class="col old">
-      <div class="tag">书中写法（已过时）</div>
+  <div class="vs">
+    <div class="old">
+      <div class="h">书中写法（已过时）</div>
       <ul>
-        <li>文件后缀 <code class="inline">.aj</code>，用 <code class="inline">public aspect</code> 传统语法</li>
-        <li>必须用 <code class="inline">ajc</code>（AspectJ 自带编译器）编译，普通 <code class="inline">javac</code> 无法识别</li>
+        <li>文件后缀 <code>.aj</code>，用 <code>public aspect</code> 传统语法</li>
+        <li>必须用 <code>ajc</code>（AspectJ 自带编译器）编译，普通 <code>javac</code> 无法识别</li>
       </ul>
     </div>
-    <div class="col new">
-      <div class="tag">推荐的现代写法</div>
+    <div class="new">
+      <div class="h">推荐的现代写法</div>
       <ul>
-        <li>普通 <code class="inline">.java</code> 文件 + <code class="inline">@Aspect</code> 注解（第 7 章详细讲）</li>
-        <li>Maven 里配 <code class="inline">dev.aspectj:aspectj-maven-plugin</code> 自动调用最新 ajc，IDE 兼容性也更好</li>
+        <li>普通 <code>.java</code> 文件 + <code>@Aspect</code> 注解（第 7 章详细讲）</li>
+        <li>Maven 里配 <code>dev.aspectj:aspectj-maven-plugin</code> 自动调用最新 ajc，IDE 兼容性也更好</li>
       </ul>
     </div>
   </div>
 
   <div class="code">
-    <div class="file">同样逻辑的现代 @AspectJ 注解写法（预告第 7 章）</div>
+    <div class="bar"><span class="tag">同样逻辑的现代 @AspectJ 注解写法（预告第 7 章）</span></div>
     <pre><code><span class="tok-ann">@Aspect</span>
 <span class="tok-kw">public class</span> JoinPointTraceAspect {
     <span class="tok-kw">private int</span> callDepth;
@@ -558,11 +663,11 @@ After: execution(void ajia.main.Main.main(String[]))</code></pre>
   </div>
 
   <div class="exercise">
-    <span class="label">✏️ 动手练习</span>
+    <h3>✏️ 动手练习</h3>
     <p>
-      打开 <code class="inline">ch03/workspace/Section3.3JoinPointDemonstrationExample</code>，把 <code class="inline">Main</code> 改成先创建两个 <code class="inline">Order</code> 并互相调用 <code class="inline">addItem()</code>，
-      重新运行后对照输出，找一找哪一行对应 <code class="inline">call</code>、哪一行对应 <code class="inline">execution</code>，再试着把切点从 <code class="inline">!within(...)</code> 改成
-      <code class="inline">execution(* ajia.domain.Order.*(..))</code>，看看输出量是不是一下少了很多——这就是切点在“精确过滤”连接点。
+      打开 <code>ch03/workspace/Section3.3JoinPointDemonstrationExample</code>，把 <code>Main</code> 改成先创建两个 <code>Order</code> 并互相调用 <code>addItem()</code>，
+      重新运行后对照输出，找一找哪一行对应 <code>call</code>、哪一行对应 <code>execution</code>，再试着把切点从 <code>!within(...)</code> 改成
+      <code>execution(* ajia.domain.Order.*(..))</code>，看看输出量是不是一下少了很多——这就是切点在“精确过滤”连接点。
     </p>
   </div>
 
@@ -574,27 +679,154 @@ After: execution(void ajia.main.Main.main(String[]))</code></pre>
     <li class="q">call 连接点和 execution 连接点最本质的区别是什么？
       <div class="a">位置不同：call 发生在“调用方”那一行代码，execution 发生在“被调用方”方法体内部。织入时机也因此不同——只想影响调用方就用 call，想改方法本身的行为就用 execution。</div>
     </li>
-    <li class="q"><code class="inline">execution(* Order+.*(..))</code> 里的 <code class="inline">+</code> 是什么意思？
+    <li class="q"><code>execution(* Order+.*(..))</code> 里的 <code>+</code> 是什么意思？
       <div class="a">表示 Order 及其所有子类型，不只是 Order 自己。</div>
     </li>
     <li class="q">为什么 Spring AOP 只支持 execution() 这一种连接点？
       <div class="a">Spring AOP 用动态代理实现，代理只能拦截“方法调用”这个层面，没有能力深入到字段读写、异常处理块等更细粒度的字节码层面——这些细粒度能力只有原生 AspectJ 的编译期/加载期织入才具备（第 9 章详细对比）。</div>
     </li>
-    <li class="q"><code class="inline">execution(* Account.*(..)) &amp;&amp; call(* Account.*(..))</code> 这个切点能选中什么？
+    <li class="q"><code>execution(* Account.*(..)) &amp;&amp; call(* Account.*(..))</code> 这个切点能选中什么？
       <div class="a">什么都选不中！因为一个连接点不可能同时既是 execution 又是 call——两者发生在不同位置。用 && 组合不同"种类"的切点，结果永远是空集，这是新手最常踩的坑之一，应改用 ||。</div>
     </li>
   </ul>
 
-  <div class="pagenav">
-    <a class="prev" href="ch02.html"><span class="lbl">上一章</span>第 2 章：初识 AspectJ</a>
-    <a class="next" href="ch04.html"><span class="lbl">下一章</span>第 4 章：用动态切面修改行为</a>
+  <div class="pager">
+    <a class="prev" href="ch02.html"><span>上一章</span>第 2 章：初识 AspectJ</a>
+    <a class="next" href="ch04.html"><span>下一章</span>第 4 章：用动态切面修改行为</a>
   </div>
+</main>
 </div>
 <script>
-document.addEventListener("click", function (e) {
-  var q = e.target.closest(".quiz .q");
-  if (q) q.parentElement.classList.toggle("open");
-});
+/* ================================================================
+   AspectJ in Action 图解笔记 · 页面脚本：侧边栏、目录、代码块、主题、自测题
+   ================================================================ */
+// 保持经典 <script> 而不是 type="module"：模块脚本在 file:// 下会被浏览器拦截，
+// 而这些页面经常是直接双击打开的。
+(() => {
+  'use strict';
+
+  const CHAPTERS = [
+    { id: 'ch01', n: '1',  t: '发现 AOP',              part: '第一部分 · 理解 AOP 与 AspectJ' },
+    { id: 'ch02', n: '2',  t: '初识 AspectJ' },
+    { id: 'ch03', n: '3',  t: '理解连接点模型' },
+    { id: 'ch04', n: '4',  t: '用动态切面修改行为' },
+    { id: 'ch05', n: '5',  t: '用静态切面修改结构' },
+    { id: 'ch06', n: '6',  t: '把切面拼在一起' },
+    { id: 'ch07', n: '7',  t: '深入 @AspectJ 注解语法' },
+    { id: 'ch08', n: '8',  t: 'AspectJ 的织入方式' },
+    { id: 'ch09', n: '9',  t: '与 Spring 集成' },
+    { id: 'ch10', n: '10', t: '监控类切面',            part: '第二部分 · 解决实际问题' },
+    { id: 'ch11', n: '11', t: '用切面强制执行规范' },
+    { id: 'ch12', n: '12', t: '切面设计模式' },
+    { id: 'ch13', n: '13', t: '并发控制' },
+    { id: 'ch14', n: '14', t: '事务管理' },
+    { id: 'ch15', n: '15', t: '应用安全' },
+    { id: 'ch16', n: '16', t: '改善领域逻辑' },
+    { id: 'ch17', n: '17', t: '迈出下一步' },
+    { id: 'appendixA',  n: 'A',   t: '搭建示例工程',      part: '附录' },
+    { id: 'appendixBC', n: 'B/C', t: '构建工具：Ant vs. Maven' }
+  ];
+
+  const cur = document.body.dataset.page || '';
+
+  /* ---------- 侧边栏 ---------- */
+  const side = document.getElementById('sidebar');
+  if (side) {
+    const brand = '<a class="brand" href="index.html"><span class="logo">AJ</span>' +
+      '<span>AspectJ 图解笔记<small>AspectJ in Action · 现代化重读</small></span></a>';
+    const links = CHAPTERS.map(({ id, n, t, part }) =>
+      (part ? `<div class="part">${part}</div>` : '') +
+      `<a class="ch${id === cur ? ' active' : ''}" href="${id}.html"><span class="n">${n}</span><span>${t}</span></a>`
+    );
+    side.innerHTML = brand + links.join('');
+    const active = side.querySelector('a.ch.active');
+    if (active) setTimeout(() => active.scrollIntoView({ block: 'center' }), 0);
+  }
+
+  /* ---------- 移动端菜单 ---------- */
+  const btn = Object.assign(document.createElement('button'), {
+    id: 'menu-btn',
+    type: 'button',
+    innerHTML: '&#9776;',
+    onclick: () => document.body.classList.toggle('nav-open')
+  });
+  btn.setAttribute('aria-label', '目录');
+  document.body.appendChild(btn);
+  document.addEventListener('click', (e) => {
+    if (document.body.classList.contains('nav-open') &&
+        side && !side.contains(e.target) && e.target !== btn) {
+      document.body.classList.remove('nav-open');
+    }
+  });
+
+  /* ---------- 主题切换 ---------- */
+  const THEME_KEY = 'ajia-doc-theme';
+  const tbtn = Object.assign(document.createElement('button'), {
+    id: 'theme-btn',
+    type: 'button',
+    innerHTML: '&#9789;',
+    onclick: () => {
+      const root = document.documentElement;
+      const now = root.getAttribute('data-theme');
+      const dark = now ? now === 'dark'
+        : window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const next = dark ? 'light' : 'dark';
+      root.setAttribute('data-theme', next);
+      try { localStorage.setItem(THEME_KEY, next); } catch {}
+    }
+  });
+  tbtn.setAttribute('aria-label', '切换深浅色');
+  document.body.appendChild(tbtn);
+  try {
+    const saved = localStorage.getItem(THEME_KEY);
+    if (saved) document.documentElement.setAttribute('data-theme', saved);
+  } catch {}
+
+  /* ---------- 章节内目录 ---------- */
+  const main = document.querySelector('main');
+  const slot = document.getElementById('chapter-toc');
+  if (slot && main) {
+    const hs = [...main.querySelectorAll('h2')];
+    if (hs.length > 2) {
+      const items = hs.map((h, i) => {
+        if (!h.id) h.id = `sec-${i + 1}`;
+        return `<li><a href="#${h.id}">${h.textContent.replace(/^\d+\.\s*/, '')}</a></li>`;
+      });
+      slot.className = 'toc';
+      slot.innerHTML = `<div class="h">本章目录</div><ol>${items.join('')}</ol>`;
+    }
+  }
+
+  /* ---------- 代码块：复制按钮 ---------- */
+  document.querySelectorAll('.code').forEach((box) => {
+    const pre = box.querySelector('pre');
+    if (!pre) return;
+    let bar = box.querySelector(':scope > .bar');
+    if (!bar) {
+      bar = Object.assign(document.createElement('div'), { className: 'bar' });
+      bar.innerHTML = '<span class="tag">code</span>';
+      box.insertBefore(bar, pre);
+    }
+    const cp = Object.assign(document.createElement('button'), {
+      className: 'copy',
+      type: 'button',
+      textContent: '复制'
+    });
+    cp.onclick = () => {
+      navigator.clipboard?.writeText(pre.textContent);
+      cp.textContent = '已复制';
+      setTimeout(() => { cp.textContent = '复制'; }, 1400);
+    };
+    bar.appendChild(cp);
+  });
+
+  /* ---------- 自测题：点击题目展开 / 收起答案 ---------- */
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('.quiz .a')) return;   // 允许在答案里选中文字
+    const li = e.target.closest('.quiz > li');
+    if (li) li.classList.toggle('open');
+  });
+})();
 </script>
 </body>
 </html>

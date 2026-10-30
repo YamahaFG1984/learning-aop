@@ -5,350 +5,458 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>第 2 章：初识 AspectJ | AspectJ in Action 图解笔记</title>
 <style>
-/* AspectJ in Action -- beginner-friendly chapter guide styles
-   Shared by index.html and every chXX.html / appendix*.html page. */
+/* ================================================================
+   AspectJ in Action 图解笔记 · 页面样式
+   每个页面内联同一份样式，单独拷出去也能打开。
+   ================================================================ */
 
+/* 每个颜色用 light-dark(浅色值, 深色值) 写一次，由 color-scheme 决定取哪一个：
+   默认跟随系统，脚本写入的 data-theme 可以强制指定。 */
 :root {
-  --bg: #f6f7fb;
-  --bg-panel: #ffffff;
-  --bg-code: #f0f2f8;
-  --bg-code-header: #e3e7f2;
-  --text: #1c2130;
-  --text-dim: #55607a;
-  --border: #dde1ee;
-  --accent: #5b5bd6;
-  --accent-dim: #eceafc;
-  --accent-text: #3f3fb0;
-  --good: #1a7f5a;
-  --good-bg: #e6f6ef;
-  --warn: #a15c00;
-  --warn-bg: #fdf1de;
-  --old: #b0203a;
-  --old-bg: #fbe9ec;
-  --new: #146c43;
-  --new-bg: #e7f6ee;
-  --shadow: 0 1px 2px rgba(30, 34, 54, 0.06), 0 8px 24px rgba(30, 34, 54, 0.05);
-  --radius: 14px;
   color-scheme: light dark;
-}
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #14161f;
-    --bg-panel: #1b1e2a;
-    --bg-code: #11131b;
-    --bg-code-header: #23273a;
-    --text: #e7e9f5;
-    --text-dim: #a4aac4;
-    --border: #2b2f42;
-    --accent: #9090f5;
-    --accent-dim: #262a44;
-    --accent-text: #b3b3fb;
-    --good: #4fd39a;
-    --good-bg: #123527;
-    --warn: #eab766;
-    --warn-bg: #3a2c11;
-    --old: #f18b9a;
-    --old-bg: #3a1620;
-    --new: #7ee2ae;
-    --new-bg: #10301f;
-    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35);
-  }
+  --bg:        light-dark(#fbfaf8, #171513);
+  --panel:     light-dark(#ffffff, #201d1a);
+  --panel-2:   light-dark(#f4f2ee, #2a2521);
+  --fg:        light-dark(#26221e, #ece6de);
+  --fg-soft:   light-dark(#5f584f, #b8afa3);
+  --fg-faint:  light-dark(#8c8377, #8b8378);
+  --line:      light-dark(#e2ddd4, #342e28);
+  --line-2:    light-dark(#cfc8bc, #463e36);
+  --accent:    light-dark(#d95602, #ff8f4d);
+  --accent-bg: light-dark(#fdf0e6, #33231a);
+  --accent-2:  light-dark(#b04503, #ffab77);
+  --green:     light-dark(#2f7d51, #6ac48d);
+  --green-bg:  light-dark(#eaf5ee, #1b2b21);
+  --blue:      light-dark(#2b6cb0, #7fb0e8);
+  --blue-bg:   light-dark(#eaf1f9, #1a232e);
+  --red:       light-dark(#c0392b, #f08076);
+  --red-bg:    light-dark(#fdecea, #2e1c1a);
+  --purple:    light-dark(#6b46c1, #b295ee);
+  --purple-bg: light-dark(#f1ecfb, #241d33);
+  --code-bg:   light-dark(#2b2620, #12100e);
+  --code-fg:   light-dark(#e9e2d8, #e6ded2);
+
+  --radius:    10px;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+          "Liberation Mono", "Noto Sans Mono CJK SC", monospace;
+
+  &[data-theme="light"] { color-scheme: light; }
+  &[data-theme="dark"]  { color-scheme: dark; }
 }
 
 * { box-sizing: border-box; }
 
-html { scroll-behavior: smooth; }
+html { scroll-behavior: smooth; scroll-padding-top: 1.5rem; }
 
 body {
   margin: 0;
   background: var(--bg);
-  color: var(--text);
-  font-family: -apple-system, "PingFang SC", "Segoe UI", "Noto Sans SC", Helvetica, Arial, sans-serif;
-  line-height: 1.75;
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.8;
+  -webkit-font-smoothing: antialiased;
 }
 
-.page {
-  max-width: 880px;
+/* ---------------- 布局 ---------------- */
+
+#app { display: flex; align-items: flex-start; }
+
+#sidebar {
+  --sidebar-w: 268px;
+  position: sticky;
+  top: 0;
+  flex: 0 0 var(--sidebar-w);
+  width: var(--sidebar-w);
+  height: 100dvh;
+  overflow-y: auto;
+  padding: 22px 14px 40px;
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+  font-size: 14px;
+
+  .brand {
+    display: flex; align-items: center; gap: 9px;
+    font-weight: 700; font-size: 16px; letter-spacing: .01em;
+    color: var(--fg); text-decoration: none;
+    padding: 4px 8px 14px;
+
+    .logo {
+      width: 26px; height: 26px; flex: none;
+      display: grid; place-items: center;
+      background: var(--accent); color: #fff; border-radius: 8px;
+      font-size: 12px; font-family: var(--mono); letter-spacing: -.02em;
+    }
+    small { display: block; font-weight: 400; font-size: 11px; color: var(--fg-faint); }
+  }
+
+  .part {
+    margin: 16px 8px 6px; font-size: 11px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--fg-faint); font-weight: 700;
+  }
+
+  a.ch {
+    display: flex; gap: 8px; align-items: baseline;
+    padding: 5px 8px; border-radius: 7px;
+    color: var(--fg-soft); text-decoration: none; line-height: 1.5;
+
+    &:hover  { background: var(--panel-2); color: var(--fg); }
+    &.active { background: var(--accent-bg); color: var(--accent-2); font-weight: 600; }
+
+    .n {
+      flex: none; width: 26px; text-align: right;
+      font-variant-numeric: tabular-nums; font-size: 12px; color: var(--fg-faint);
+    }
+    &.active .n { color: var(--accent); }
+  }
+}
+
+main {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 900px;
+  padding: 40px 44px 100px;
   margin: 0 auto;
-  padding: 28px 20px 90px;
 }
 
-.topbar {
-  max-width: 880px;
-  margin: 0 auto;
-  padding: 14px 20px 0;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 13px;
-  color: var(--text-dim);
+/* 两个悬浮按钮：移动端菜单、深浅色切换 */
+:is(#menu-btn, #theme-btn) {
+  position: fixed;
+  border: 1px solid var(--line-2); background: var(--panel); color: var(--fg);
+  cursor: pointer;
 }
-.topbar a { color: var(--text-dim); text-decoration: none; }
-.topbar a:hover { color: var(--accent-text); }
+#menu-btn {
+  display: none;
+  z-index: 40; inset: 12px auto auto 12px;
+  width: 42px; height: 42px; border-radius: 10px;
+  font-size: 18px;
+}
+#theme-btn {
+  z-index: 30; inset: auto 16px 16px auto;
+  width: 40px; height: 40px; border-radius: 50%;
+  font-size: 16px;
+}
 
-h1, h2, h3, h4 { line-height: 1.35; letter-spacing: -0.01em; }
-h1 { font-size: 30px; margin: 6px 0 6px; }
-h2 { font-size: 22px; margin: 46px 0 14px; padding-top: 10px; border-top: 1px solid var(--border); }
-h3 { font-size: 18px; margin: 30px 0 10px; color: var(--accent-text); }
-h4 { font-size: 15px; margin: 20px 0 8px; }
+@media (width <= 900px) {
+  #menu-btn { display: block; }
+  #sidebar {
+    position: fixed; z-index: 39; inset: 0 auto auto 0;
+    padding-top: 62px;
+    transform: translateX(-102%); transition: transform .22s ease;
+    box-shadow: 0 0 40px rgb(0 0 0 / .28);
+
+    body.nav-open & { transform: none; }
+  }
+  main { padding: 68px 20px 80px; }
+}
+
+/* ---------------- 排版 ---------------- */
+
+h1, h2, h3, h4 { line-height: 1.35; color: var(--fg); }
+h1 { font-size: 30px; margin: 0 0 6px; letter-spacing: -.01em; }
+h2 {
+  font-size: 22px; margin: 52px 0 14px; padding-top: 10px;
+  border-top: 1px solid var(--line);
+
+  &:first-of-type { border-top: none; }
+}
+h3 { font-size: 17.5px; margin: 30px 0 8px; }
+h4 { font-size: 15.5px; margin: 22px 0 6px; color: var(--fg-soft); }
 p { margin: 12px 0; }
-ul, ol { padding-left: 22px; }
-li { margin: 6px 0; }
-a { color: var(--accent-text); }
+ul, ol { padding-left: 1.5em; margin: 12px 0; }
+li { margin: 5px 0; }
+li > :is(ul, ol) { margin: 4px 0; }
+a { color: var(--accent-2); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+hr { border: none; border-top: 1px solid var(--line); margin: 36px 0; }
+:is(strong, b) { font-weight: 700; color: var(--fg); }
 
-.kicker {
-  display: inline-block;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  color: var(--accent-text);
-  background: var(--accent-dim);
-  padding: 3px 10px;
-  border-radius: 999px;
-  margin-bottom: 10px;
+code {
+  font-family: var(--mono); font-size: .875em;
+  background: var(--panel-2); border: 1px solid var(--line);
+  padding: .08em .35em; border-radius: 5px;
+  word-break: break-word;
 }
+pre code { all: unset; font-family: var(--mono); }
 
-.subtitle { color: var(--text-dim); font-size: 16px; margin-top: 0; }
+.chapter-eyebrow {
+  display: inline-block; font-size: 12px; letter-spacing: .14em;
+  text-transform: uppercase; font-weight: 700; color: var(--accent);
+  background: var(--accent-bg); padding: 3px 10px; border-radius: 20px;
+  margin-bottom: 14px;
+}
+.lede { font-size: 17.5px; color: var(--fg-soft); margin: 10px 0 26px; }
 
-.covers {
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px 20px;
-  margin: 20px 0 8px;
-  box-shadow: var(--shadow);
-}
-.covers h4 { margin-top: 0; color: var(--text-dim); font-weight: 600; }
-.covers ul { margin: 6px 0 0; }
+/* ---------------- 代码块 ---------------- */
 
-/* ---- callouts ---- */
-.callout {
-  border-radius: var(--radius);
-  padding: 14px 18px;
-  margin: 18px 0;
-  border: 1px solid var(--border);
-  background: var(--bg-panel);
-}
-.callout > .label {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  margin-bottom: 6px;
-  display: block;
-}
-.callout.tip { background: var(--good-bg); border-color: var(--good); }
-.callout.tip > .label { color: var(--good); }
-.callout.warn { background: var(--warn-bg); border-color: var(--warn); }
-.callout.warn > .label { color: var(--warn); }
-.callout.modern { background: var(--accent-dim); border-color: var(--accent); }
-.callout.modern > .label { color: var(--accent-text); }
-.callout p:first-child { margin-top: 0; }
-.callout p:last-child { margin-bottom: 0; }
-
-/* ---- old vs new version compare table ---- */
-.versus {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin: 16px 0;
-}
-@media (max-width: 620px) { .versus { grid-template-columns: 1fr; } }
-.versus .col {
-  border-radius: var(--radius);
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-}
-.versus .old { background: var(--old-bg); }
-.versus .new { background: var(--new-bg); }
-.versus .col .tag {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-.versus .old .tag { color: var(--old); }
-.versus .new .tag { color: var(--new); }
-.versus .col ul { margin: 8px 0 0; padding-left: 18px; font-size: 14px; }
-
-/* ---- code blocks ---- */
 .code {
+  --code-muted: #b9b0a3;
+  margin: 18px 0;
   border-radius: var(--radius);
   overflow: hidden;
-  margin: 16px 0;
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow);
-}
-.code .file {
-  background: var(--bg-code-header);
-  color: var(--text-dim);
-  font-size: 12px;
-  padding: 7px 14px;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  border-bottom: 1px solid var(--border);
-}
-.code pre {
-  margin: 0;
-  padding: 14px 16px;
-  background: var(--bg-code);
-  overflow-x: auto;
-}
-.code code, pre code {
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  font-size: 13.2px;
-  white-space: pre;
-}
-code.inline {
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  background: var(--bg-code);
-  border: 1px solid var(--border);
-  padding: 1px 6px;
-  border-radius: 6px;
-  font-size: 0.9em;
-}
-.tok-kw { color: #8250df; }
-.tok-ann { color: #966600; font-weight: 600; }
-@media (prefers-color-scheme: dark) { .tok-ann { color: #eab766; } .tok-kw { color: #c9a8ff; } }
-.tok-str { color: #0a7d4b; }
-@media (prefers-color-scheme: dark) { .tok-str { color: #7ee2ae; } }
-.tok-cm { color: var(--text-dim); font-style: italic; }
-.tok-type { color: #0550ae; }
-@media (prefers-color-scheme: dark) { .tok-type { color: #8ab4f8; } }
+  border: 1px solid var(--line-2);
+  background: var(--code-bg);
 
-/* ---- diagrams ---- */
-.diagram {
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px;
-  margin: 20px 0;
-  box-shadow: var(--shadow);
-  overflow-x: auto;
-}
-.diagram svg { display: block; margin: 0 auto; max-width: 100%; height: auto; }
-.diagram .caption {
-  text-align: center;
-  font-size: 12.5px;
-  color: var(--text-dim);
-  margin-top: 10px;
-}
-.diagram text { fill: var(--text); font-family: -apple-system, "PingFang SC", "Noto Sans SC", sans-serif; }
-.diagram .dim { fill: var(--text-dim); }
-.diagram .box { fill: var(--bg-code); stroke: var(--border); }
-.diagram .accentbox { fill: var(--accent-dim); stroke: var(--accent); }
-.diagram .oldbox { fill: var(--old-bg); stroke: var(--old); }
-.diagram .newbox { fill: var(--new-bg); stroke: var(--new); }
-.diagram .arrow { stroke: var(--text-dim); stroke-width: 1.6; fill: none; marker-end: url(#arrow); }
-.diagram .arrow-accent { stroke: var(--accent); stroke-width: 2; fill: none; marker-end: url(#arrowAccent); }
+  > .bar {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 6px 12px;
+    background: rgb(255 255 255 / .05);
+    border-bottom: 1px solid rgb(255 255 255 / .08);
+    font-family: var(--mono); font-size: 11.5px;
+    color: var(--code-muted); letter-spacing: .03em;
 
-table.tbl { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; }
-table.tbl th, table.tbl td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
-table.tbl th { background: var(--bg-code-header); }
+    .tag { color: #d8b48a; font-weight: 600; }
+  }
 
+  pre {
+    margin: 0; padding: 14px 16px; overflow-x: auto;
+    color: var(--code-fg); font-family: var(--mono);
+    font-size: 13.2px; line-height: 1.72;
+    tab-size: 2;
+  }
+
+  .copy {
+    flex: none;
+    border: 1px solid rgb(255 255 255 / .16); background: transparent;
+    color: var(--code-muted); border-radius: 5px; font-size: 11px;
+    padding: 2px 8px; cursor: pointer; font-family: var(--sans);
+
+    &:hover { color: #fff; border-color: rgb(255 255 255 / .4); }
+  }
+}
+
+/* 语法高亮（代码块背景在深浅两种主题下都是深色） */
+.tok-cm   { color: #7f7568; font-style: italic; }
+.tok-str  { color: #b4d68a; }
+.tok-kw   { color: #ff9d5c; }
+.tok-ann  { color: #d7a3e6; }
+.tok-type { color: #e8c07d; }
+
+/* ---------------- 提示块 ---------------- */
+
+/* 各变体只设置颜色变量；没设置时回落到中性的边框和面板色 */
+.box {
+  margin: 20px 0; padding: 14px 18px 14px 16px;
+  border-left: 4px solid var(--box-c, var(--line-2));
+  background: var(--box-bg, var(--panel));
+  border-radius: 0 var(--radius) var(--radius) 0;
+
+  > .t {
+    font-weight: 700; font-size: 14px; margin-bottom: 4px;
+    display: flex; align-items: center; gap: 7px;
+    color: var(--box-t, var(--box-c, currentColor));
+  }
+  p:first-of-type { margin-top: 0; }
+  :is(p, ul, ol):last-child { margin-bottom: 0; }
+
+  &.note { --box-c: var(--blue);   --box-bg: var(--blue-bg); }
+  &.tip  { --box-c: var(--green);  --box-bg: var(--green-bg); }
+  &.warn { --box-c: var(--red);    --box-bg: var(--red-bg); }
+  &.key  { --box-c: var(--accent); --box-bg: var(--accent-bg); --box-t: var(--accent-2); }
+  &.deep { --box-c: var(--purple); --box-bg: var(--purple-bg); }
+}
+
+/* 学习目标 */
+.goals {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 16px 20px; margin: 22px 0 28px;
+
+  h4 { margin: 0 0 8px; color: var(--accent-2); font-size: 14px; letter-spacing: .04em; }
+  ul { margin: 0; }
+}
+
+/* 章节内目录 */
+.toc {
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 12px 18px; margin: 0 0 30px;
+  font-size: 14.5px;
+
+  .h {
+    font-weight: 700; font-size: 12px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--fg-faint); margin-bottom: 6px;
+  }
+  ol { margin: 0; padding-left: 1.3em; }
+  a {
+    color: var(--fg-soft); text-decoration: none;
+    &:hover { color: var(--accent-2); text-decoration: underline; }
+  }
+}
+
+/* ---------------- 表格 ---------------- */
+
+.tw { overflow-x: auto; margin: 20px 0; }
+table {
+  border-collapse: collapse; width: 100%; font-size: 14.5px;
+  background: var(--panel); border-radius: var(--radius); overflow: hidden;
+}
+th, td { padding: 9px 13px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { background: var(--panel-2); font-weight: 700; font-size: 13.5px; white-space: nowrap; }
+tr:last-child td { border-bottom: none; }
+td code { font-size: .86em; }
+
+/* ---------------- 图示 ---------------- */
+
+figure { margin: 26px 0; overflow-x: auto; }
+figure svg { display: block; width: 100%; height: auto; }
+figcaption {
+  margin-top: 8px; font-size: 13px; color: var(--fg-faint); text-align: center;
+}
+
+/* 图里的元素常带自己的 fill / font-size 属性；CSS 会压过这些属性，
+   所以只给没写属性的元素兜底。 */
+.dgm {
+  color: var(--fg-faint);            /* 箭头 marker 用 currentColor */
+
+  :is(.bx, .bx-a, .bx-b, .bx-g, .bx-p, .bx-r, .bx-d) { stroke-width: 1.5; }
+  .bx    { fill: var(--panel);     stroke: var(--line-2); }
+  .bx-a  { fill: var(--accent-bg); stroke: var(--accent); }
+  .bx-b  { fill: var(--blue-bg);   stroke: var(--blue); }
+  .bx-g  { fill: var(--green-bg);  stroke: var(--green); }
+  .bx-p  { fill: var(--purple-bg); stroke: var(--purple); }
+  .bx-r  { fill: var(--red-bg);    stroke: var(--red); }
+  .bx-d  { fill: var(--panel-2);   stroke: var(--line-2); stroke-dasharray: 5 4; }
+
+  :is(.ln, .ln-a, .ln-g, .ln-r) { fill: none; }
+  .ln    { stroke: var(--fg-faint); stroke-width: 1.6; }
+  :is(.ln-a, .ln-g, .ln-r) { stroke-width: 1.8; }
+  .ln-a  { stroke: var(--accent); }
+  .ln-g  { stroke: var(--green); }
+  .ln-r  { stroke: var(--red); }
+
+  text:not([font-family]) { font-family: var(--sans); }
+  text:not([fill])        { fill: var(--fg); }
+  .dim:not([fill])        { fill: var(--fg-soft); }
+}
+
+/* ---------------- 对照卡片 ---------------- */
+
+.vs {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 20px 0;
+
+  @media (width <= 700px) { grid-template-columns: 1fr; }
+
+  > div {
+    border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--panel);
+    > .h { padding: 7px 14px; font-size: 12.5px; font-weight: 700; border-bottom: 1px solid var(--line); }
+    > ul { margin: 10px 14px 12px; padding-left: 1.2em; font-size: 14px; }
+    > pre {
+      margin: 0; padding: 12px 14px; overflow-x: auto;
+      font-family: var(--mono); font-size: 12.5px; line-height: 1.65; white-space: pre-wrap;
+    }
+  }
+  .old > .h { background: var(--panel-2); color: var(--fg-faint); }
+  .new > .h { background: var(--accent-bg); color: var(--accent-2); }
+}
+
+/* 练习 */
 .exercise {
-  background: var(--bg-panel);
-  border: 1px dashed var(--accent);
-  border-radius: var(--radius);
-  padding: 14px 18px;
-  margin: 18px 0;
-}
-.exercise .label { color: var(--accent-text); font-weight: 700; font-size: 13px; }
+  border: 1px dashed var(--accent); background: var(--accent-bg);
+  border-radius: var(--radius); padding: 16px 20px; margin: 30px 0 0;
 
-.quiz { list-style: none; padding-left: 0; }
-.quiz li {
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 10px 14px;
-  margin: 8px 0;
+  h3 { margin: 0 0 8px; color: var(--accent-2); font-size: 16px; }
+  :is(p, ol, ul):last-child { margin-bottom: 0; }
 }
-.quiz .q { font-weight: 600; }
-.quiz .a { color: var(--text-dim); margin-top: 6px; font-size: 14px; display: none; }
-.quiz li.open .a { display: block; }
-.quiz .q::before { content: "▸ "; color: var(--accent); }
 
-.pagenav {
-  display: flex;
-  justify-content: space-between;
-  gap: 14px;
-  margin-top: 56px;
-  padding-top: 20px;
-  border-top: 1px solid var(--border);
-  font-size: 14px;
-}
-.pagenav a {
-  text-decoration: none;
-  color: var(--text);
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 10px 16px;
-  flex: 1;
-  box-shadow: var(--shadow);
-}
-.pagenav a:hover { border-color: var(--accent); }
-.pagenav .lbl { display: block; font-size: 11px; color: var(--text-dim); margin-bottom: 2px; }
-.pagenav .next { text-align: right; }
+/* 自测题：点击题目展开答案 */
+.quiz {
+  list-style: none; padding-left: 0;
 
-.toc-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 14px;
-  margin: 22px 0;
+  > li {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 11px 16px; margin: 10px 0;
+    cursor: pointer;
+
+    &:hover { border-color: var(--accent); }
+    &::before {
+      content: "▸"; display: inline-block; width: 1.1em;
+      color: var(--accent); transition: transform .15s ease;
+    }
+    &.open::before { transform: rotate(90deg); }
+  }
+  .q { font-weight: 600; }
+  .a {
+    display: none; cursor: auto;
+    margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line);
+    color: var(--fg-soft); font-size: 14.5px; font-weight: 400;
+  }
+  li.open .a { display: block; }
 }
+
+/* 章节导航 */
+.pager {
+  display: flex; gap: 12px; margin-top: 54px; padding-top: 22px; border-top: 1px solid var(--line);
+
+  a {
+    flex: 1 1 0; padding: 12px 16px; border: 1px solid var(--line);
+    border-radius: var(--radius); background: var(--panel);
+    text-decoration: none; color: var(--fg); font-size: 14px;
+
+    &:hover { border-color: var(--accent); }
+    span { display: block; font-size: 11.5px; color: var(--fg-faint); margin-bottom: 2px; }
+    &.next { text-align: right; }
+  }
+}
+
+/* 首页 */
+.hero {
+  border: 1px solid var(--line); background: var(--panel);
+  border-radius: 16px; padding: 34px 34px 30px; margin-bottom: 30px;
+
+  h1 { font-size: 34px; }
+  .sub { font-size: 18px; color: var(--fg-soft); margin: 8px 0 0; }
+
+  @media (width <= 700px) { padding: 24px 20px; h1 { font-size: 28px; } }
+}
+.pill {
+  display: inline-block; font-size: 12px; padding: 3px 10px; border-radius: 20px;
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--fg-soft);
+  margin: 3px 5px 3px 0;
+}
+.toc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 .toc-card {
-  display: block;
-  text-decoration: none;
-  color: var(--text);
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px 18px;
-  box-shadow: var(--shadow);
-  transition: transform 0.12s ease, border-color 0.12s ease;
+  display: block; text-decoration: none; color: inherit;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 13px 16px;
+
+  &:hover { border-color: var(--accent); background: var(--accent-bg); }
+  .n { font-size: 11px; letter-spacing: .1em; color: var(--accent); font-weight: 700; }
+  .t { font-weight: 700; font-size: 15.5px; margin: 2px 0 3px; }
+  .d { font-size: 13.5px; color: var(--fg-soft); line-height: 1.6; }
 }
-.toc-card:hover { transform: translateY(-2px); border-color: var(--accent); }
-.toc-card .num { font-size: 12px; color: var(--accent-text); font-weight: 700; }
-.toc-card .ttl { font-size: 16px; font-weight: 700; margin: 4px 0 6px; }
-.toc-card .desc { font-size: 13px; color: var(--text-dim); }
-.toc-part {
-  margin: 34px 0 6px;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: var(--text-dim);
-  text-transform: uppercase;
-}
+.note-small { margin-top: 40px; font-size: 13px; color: var(--fg-faint); }
 </style>
 </head>
-<body>
-<div class="topbar">
-  <a href="index.html">&larr; 全部章节</a>
-  <span>AspectJ in Action · 图解笔记</span>
-</div>
-<div class="page">
+<body data-page="ch02">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><marker id="ar-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--accent)"/></marker><marker id="ar-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--green)"/></marker><marker id="ar-r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--red)"/></marker></defs></svg>
+<div id="app">
+<aside id="sidebar"></aside>
+<main>
 
-  <span class="kicker">CHAPTER 02</span>
+  <span class="chapter-eyebrow">第 2 章</span>
   <h1>初识 AspectJ</h1>
-  <p class="subtitle">一句话概括本章：写出你的第一个切面，认识 join point / pointcut / advice / aspect 这四个词，并搞懂“织入”到底发生在什么时候。</p>
+  <p class="lede">一句话概括本章：写出你的第一个切面，认识 join point / pointcut / advice / aspect 这四个词，并搞懂“织入”到底发生在什么时候。</p>
 
-  <div class="covers">
+  <div class="goals">
     <h4>本章你将学到</h4>
     <ul>
-      <li>用两种语法写同一个切面：传统 <code class="inline">.aj</code> 语法，和更现代的 <code class="inline">@AspectJ</code> 注解语法</li>
+      <li>用两种语法写同一个切面：传统 <code>.aj</code> 语法，和更现代的 <code>@AspectJ</code> 注解语法</li>
       <li>编译期织入 / 二进制织入 / 加载期织入（LTW）三种方式的直觉区别</li>
       <li>织入之后的类“变成了什么样子”（源码层面模拟一下织入结果）</li>
       <li>Spring 怎么在不用 AspectJ 编译器的情况下，也能跑 @AspectJ 语法的切面</li>
     </ul>
   </div>
 
+  <div id="chapter-toc"></div>
+
   <h2>1. 一个朴素的业务类</h2>
   <p>
-    书中示例仓库 <code class="inline">ch02/workspace/Section2.1.2AddingAnAspect</code> 里有一个非常简单的
-    <code class="inline">MessageCommunicator</code>：它只会把消息打印出来，完全不知道“权限校验”这回事。
+    书中示例仓库 <code>ch02/workspace/Section2.1.2AddingAnAspect</code> 里有一个非常简单的
+    <code>MessageCommunicator</code>：它只会把消息打印出来，完全不知道“权限校验”这回事。
   </p>
   <div class="code">
-    <div class="file">ajia/messaging/MessageCommunicator.java</div>
+    <div class="bar"><span class="tag">ajia/messaging/MessageCommunicator.java</span></div>
     <pre><code><span class="tok-kw">package</span> ajia.messaging;
 
 <span class="tok-kw">public</span> <span class="tok-kw">class</span> MessageCommunicator {
@@ -360,12 +468,12 @@ table.tbl th { background: var(--bg-code-header); }
     }
 }</code></pre>
   </div>
-  <p>现在的需求是：调用 <code class="inline">deliver</code> 之前必须先做一次身份认证。传统写法要在每个方法里手写一行 <code class="inline">authenticator.authenticate()</code>——这就是第 1 章说的“纠缠”。AOP 的做法是：<strong>一行都不改</strong> <code class="inline">MessageCommunicator</code>，另外写一个切面。</p>
+  <p>现在的需求是：调用 <code>deliver</code> 之前必须先做一次身份认证。传统写法要在每个方法里手写一行 <code>authenticator.authenticate()</code>——这就是第 1 章说的“纠缠”。AOP 的做法是：<strong>一行都不改</strong> <code>MessageCommunicator</code>，另外写一个切面。</p>
 
-  <h2>2. 传统语法：<code class="inline">.aj</code> 文件</h2>
-  <p>这是仓库里真实的 <code class="inline">SecurityAspect.aj</code>（为可读性略去了版权头）：</p>
+  <h2>2. 传统语法：<code>.aj</code> 文件</h2>
+  <p>这是仓库里真实的 <code>SecurityAspect.aj</code>（为可读性略去了版权头）：</p>
   <div class="code">
-    <div class="file">ajia/security/SecurityAspect.aj</div>
+    <div class="bar"><span class="tag">ajia/security/SecurityAspect.aj</span></div>
     <pre><code><span class="tok-kw">package</span> ajia.security;
 
 <span class="tok-kw">import</span> ajia.messaging.MessageCommunicator;
@@ -383,47 +491,46 @@ table.tbl th { background: var(--bg-code-header); }
 }</code></pre>
   </div>
   <p>逐行对应回上一章的四个词：</p>
-  <table class="tbl">
+  <div class="tw"><table>
     <tr><th>代码</th><th>对应概念</th></tr>
-    <tr><td><code class="inline">public aspect SecurityAspect { ... }</code></td><td><strong>切面</strong>：新的模块单元，语法上很像 class</td></tr>
-    <tr><td><code class="inline">execution(* MessageCommunicator.deliver(..))</code></td><td><strong>切点表达式</strong>：选中“MessageCommunicator 类里任意返回值、任意参数的 deliver 方法被执行”这件事；<code class="inline">*</code> 通配返回值，<code class="inline">..</code> 通配参数列表</td></tr>
-    <tr><td><code class="inline">pointcut secureAccess() : ...</code></td><td>给上面这条切点表达式起个名字，方便复用</td></tr>
-    <tr><td><code class="inline">before() : secureAccess() { ... }</code></td><td><strong>通知</strong>：在命中的连接点（也就是每次 deliver 方法真正被调用时）<em>之前</em>执行这段代码</td></tr>
-  </table>
+    <tr><td><code>public aspect SecurityAspect { ... }</code></td><td><strong>切面</strong>：新的模块单元，语法上很像 class</td></tr>
+    <tr><td><code>execution(* MessageCommunicator.deliver(..))</code></td><td><strong>切点表达式</strong>：选中“MessageCommunicator 类里任意返回值、任意参数的 deliver 方法被执行”这件事；<code>*</code> 通配返回值，<code>..</code> 通配参数列表</td></tr>
+    <tr><td><code>pointcut secureAccess() : ...</code></td><td>给上面这条切点表达式起个名字，方便复用</td></tr>
+    <tr><td><code>before() : secureAccess() { ... }</code></td><td><strong>通知</strong>：在命中的连接点（也就是每次 deliver 方法真正被调用时）<em>之前</em>执行这段代码</td></tr>
+  </table></div>
 
-  <div class="diagram">
-    <svg viewBox="0 0 660 260" xmlns="http://www.w3.org/2000/svg">
+  <figure><svg class="dgm" viewBox="0 0 660 260" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <marker id="arrow-ch02-1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
           <path d="M0,0 L6,3 L0,6 Z" fill="currentColor"/>
         </marker>
       </defs>
-      <rect class="box" x="230" y="20" width="200" height="46" rx="8"/>
+      <rect class="bx" x="230" y="20" width="200" height="46" rx="8"/>
       <text x="330" y="48" text-anchor="middle" font-size="13">连接点：deliver() 被调用</text>
 
-      <rect class="accentbox" x="200" y="100" width="260" height="46" rx="8"/>
+      <rect class="bx-a" x="200" y="100" width="260" height="46" rx="8"/>
       <text x="330" y="128" text-anchor="middle" font-size="13">切点：挑中所有 deliver() 调用</text>
-      <path class="arrow" d="M330,66 L330,96" marker-end="url(#arrow-ch02-1)"/>
+      <path class="ln" d="M330,66 L330,96" marker-end="url(#arrow-ch02-1)"/>
 
-      <rect class="box" x="200" y="180" width="260" height="46" rx="8"/>
+      <rect class="bx" x="200" y="180" width="260" height="46" rx="8"/>
       <text x="330" y="208" text-anchor="middle" font-size="13">通知：before，先鉴权再放行</text>
-      <path class="arrow" d="M330,146 L330,176" marker-end="url(#arrow-ch02-1)"/>
+      <path class="ln" d="M330,146 L330,176" marker-end="url(#arrow-ch02-1)"/>
 
-      <rect class="oldbox" x="20" y="140" width="140" height="46" rx="8"/>
+      <rect class="bx-r" x="20" y="140" width="140" height="46" rx="8"/>
       <text x="90" y="168" text-anchor="middle" font-size="12">容器：SecurityAspect</text>
-      <path class="arrow" d="M160,163 L196,140" marker-end="url(#arrow-ch02-1)"/>
+      <path class="ln" d="M160,163 L196,140" marker-end="url(#arrow-ch02-1)"/>
       <text x="330" y="240" text-anchor="middle" class="dim" font-size="12">切面 = 装着「切点 + 通知」这套组合拳的模块</text>
     </svg>
-    <div class="caption">图 2-1　连接点是“候选事件”，切点从中筛选，通知定义命中后做什么，三者一起装在一个切面里</div>
-  </div>
+    <figcaption>图 2-1　连接点是“候选事件”，切点从中筛选，通知定义命中后做什么，三者一起装在一个切面里</figcaption>
+  </figure>
 
-  <h2>3. 更现代的写法：<code class="inline">@AspectJ</code> 注解语法</h2>
+  <h2>3. 更现代的写法：<code>@AspectJ</code> 注解语法</h2>
   <p>
     从 AspectJ 5 开始（AspectWerkz 并入之后），同一个切面可以完全用普通 Java 注解写出来，不需要
-    <code class="inline">.aj</code> 文件，也不强制要求专用编译器：
+    <code>.aj</code> 文件，也不强制要求专用编译器：
   </p>
   <div class="code">
-    <div class="file">ajia/security/SecurityAspect.java（@AspectJ 语法版本）</div>
+    <div class="bar"><span class="tag">ajia/security/SecurityAspect.java（@AspectJ 语法版本）</span></div>
     <pre><code><span class="tok-kw">package</span> ajia.security;
 
 <span class="tok-kw">import</span> org.aspectj.lang.annotation.Aspect;
@@ -445,96 +552,95 @@ table.tbl th { background: var(--bg-code-header); }
     }
 }</code></pre>
   </div>
-  <div class="versus">
-    <div class="col old">
-      <div class="tag">.aj 传统语法</div>
+  <div class="vs">
+    <div class="old">
+      <div class="h">.aj 传统语法</div>
       <ul>
         <li>需要 ajc 专用编译器（或至少专用插件）</li>
         <li>语法更简洁，能表达全部 AspectJ 特性（含第 5 章的类型间声明）</li>
-        <li>普通 Java IDE/工具默认不认识 <code class="inline">.aj</code></li>
+        <li>普通 Java IDE/工具默认不认识 <code>.aj</code></li>
       </ul>
     </div>
-    <div class="col new">
-      <div class="tag">@AspectJ 注解语法（新代码推荐）</div>
+    <div class="new">
+      <div class="h">@AspectJ 注解语法（新代码推荐）</div>
       <ul>
-        <li>本质是合法的 Java 代码，<code class="inline">javac</code> 能编译（但要真正生效仍需织入器或 Spring AOP 代理）</li>
+        <li>本质是合法的 Java 代码，<code>javac</code> 能编译（但要真正生效仍需织入器或 Spring AOP 代理）</li>
         <li>IDE 补全、重构、静态检查全部可用</li>
         <li>是 Spring AOP 唯一支持的书写方式，见第 9 章</li>
       </ul>
     </div>
   </div>
-  <p>注意一个容易踩的坑，书里也特别提醒过：<strong>单用 <code class="inline">javac</code> 编译带 <code class="inline">@Aspect</code> 的类，程序照样能跑，但切面完全不会生效</strong>——因为 <code class="inline">javac</code> 根本不认识 <code class="inline">@Aspect</code> 的语义，你还需要一个织入器或者 Spring 的代理机制真正把逻辑接上。</p>
+  <p>注意一个容易踩的坑，书里也特别提醒过：<strong>单用 <code>javac</code> 编译带 <code>@Aspect</code> 的类，程序照样能跑，但切面完全不会生效</strong>——因为 <code>javac</code> 根本不认识 <code>@Aspect</code> 的语义，你还需要一个织入器或者 Spring 的代理机制真正把逻辑接上。</p>
 
   <h2>4. 织入到底发生在什么时候</h2>
   <p>AspectJ 提供三种织入时机，效果完全等价，只是发生的阶段不同：</p>
-  <div class="diagram">
-    <svg viewBox="0 0 680 260" xmlns="http://www.w3.org/2000/svg">
+  <figure><svg class="dgm" viewBox="0 0 680 260" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <marker id="arrow-ch02-2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
           <path d="M0,0 L6,3 L0,6 Z" fill="currentColor"/>
         </marker>
       </defs>
-      <rect class="box" x="20" y="30" width="140" height="44" rx="8"/>
+      <rect class="bx" x="20" y="30" width="140" height="44" rx="8"/>
       <text x="90" y="57" text-anchor="middle" font-size="12">.java / .aj 源码</text>
-      <path class="arrow" d="M160,52 L210,52" marker-end="url(#arrow-ch02-2)"/>
-      <rect class="accentbox" x="210" y="30" width="150" height="44" rx="8"/>
+      <path class="ln" d="M160,52 L210,52" marker-end="url(#arrow-ch02-2)"/>
+      <rect class="bx-a" x="210" y="30" width="150" height="44" rx="8"/>
       <text x="285" y="52" text-anchor="middle" font-size="12">① 源码织入</text>
       <text x="285" y="66" text-anchor="middle" font-size="10" class="dim">ajc 直接产出织入后字节码</text>
 
-      <rect class="box" x="20" y="100" width="140" height="44" rx="8"/>
+      <rect class="bx" x="20" y="100" width="140" height="44" rx="8"/>
       <text x="90" y="127" text-anchor="middle" font-size="12">.class（已编译）</text>
-      <path class="arrow" d="M160,122 L210,122" marker-end="url(#arrow-ch02-2)"/>
-      <rect class="accentbox" x="210" y="100" width="150" height="44" rx="8"/>
+      <path class="ln" d="M160,122 L210,122" marker-end="url(#arrow-ch02-2)"/>
+      <rect class="bx-a" x="210" y="100" width="150" height="44" rx="8"/>
       <text x="285" y="122" text-anchor="middle" font-size="12">② 二进制织入</text>
       <text x="285" y="136" text-anchor="middle" font-size="10" class="dim">ajc -inpath/-aspectpath</text>
 
-      <rect class="box" x="20" y="170" width="140" height="44" rx="8"/>
+      <rect class="bx" x="20" y="170" width="140" height="44" rx="8"/>
       <text x="90" y="197" text-anchor="middle" font-size="12">类加载进 JVM 那一刻</text>
-      <path class="arrow" d="M160,192 L210,192" marker-end="url(#arrow-ch02-2)"/>
-      <rect class="accentbox" x="210" y="170" width="150" height="44" rx="8"/>
+      <path class="ln" d="M160,192 L210,192" marker-end="url(#arrow-ch02-2)"/>
+      <rect class="bx-a" x="210" y="170" width="150" height="44" rx="8"/>
       <text x="285" y="192" text-anchor="middle" font-size="12">③ 加载期织入 LTW</text>
       <text x="285" y="206" text-anchor="middle" font-size="10" class="dim">-javaagent + aop.xml</text>
 
-      <path class="arrow-accent" d="M360,52 L360,192" />
-      <path class="arrow-accent" d="M360,192 L470,120" marker-end="url(#arrow-ch02-2)"/>
-      <rect class="newbox" x="470" y="90" width="180" height="60" rx="8"/>
+      <path class="ln-a" d="M360,52 L360,192" />
+      <path class="ln-a" d="M360,192 L470,120" marker-end="url(#ar-a)"/>
+      <rect class="bx-g" x="470" y="90" width="180" height="60" rx="8"/>
       <text x="560" y="115" text-anchor="middle" font-size="12">已织入的字节码</text>
       <text x="560" y="133" text-anchor="middle" font-size="12">交给 JVM 正常执行</text>
     </svg>
-    <div class="caption">图 2-2　三条路径殊途同归：不管在哪个阶段织入，最终 JVM 拿到的都是“切面逻辑已经焊进去”的字节码</div>
-  </div>
-  <p>本章只需要有这个直觉；第 8 章会展开讲三种方式各自的取舍（比如 LTW 不用改构建脚本，但需要 <code class="inline">-javaagent</code> 启动参数）。</p>
+    <figcaption>图 2-2　三条路径殊途同归：不管在哪个阶段织入，最终 JVM 拿到的都是“切面逻辑已经焊进去”的字节码</figcaption>
+  </figure>
+  <p>本章只需要有这个直觉；第 8 章会展开讲三种方式各自的取舍（比如 LTW 不用改构建脚本，但需要 <code>-javaagent</code> 启动参数）。</p>
 
-  <div class="callout tip">
-    <span class="label">💡 一个更容易记住的类比</span>
-    <p>把 ajc 想象成 C/C++ 的链接器（linker）：javac/普通编译产出的 <code class="inline">.class</code> 相当于「目标文件」，织入器把「目标文件」和「切面」链接在一起，产出最终可执行的「字节码」。源码织入只是把「编译」和「链接」这两步合并成了一步。</p>
+  <div class="box tip">
+    <div class="t">💡 一个更容易记住的类比</div>
+    <p>把 ajc 想象成 C/C++ 的链接器（linker）：javac/普通编译产出的 <code>.class</code> 相当于「目标文件」，织入器把「目标文件」和「切面」链接在一起，产出最终可执行的「字节码」。源码织入只是把「编译」和「链接」这两步合并成了一步。</p>
   </div>
 
   <h2>5. 现代化改造：用 Maven 而不是 Ant 跑起来</h2>
   <p>
-    书中 2009 年版本用的是 <code class="inline">ajc</code> 命令行 + Ant（仓库里 <code class="inline">run-ant.sh</code>）或很旧版本的 Maven 插件。
+    书中 2009 年版本用的是 <code>ajc</code> 命令行 + Ant（仓库里 <code>run-ant.sh</code>）或很旧版本的 Maven 插件。
     今天写新项目，建议直接用 Maven（或 Gradle）+ 社区维护的 AspectJ 编译插件：
   </p>
-  <div class="versus">
-    <div class="col old">
-      <div class="tag">书中写法（已过时）</div>
+  <div class="vs">
+    <div class="old">
+      <div class="h">书中写法（已过时）</div>
       <ul>
-        <li>AspectJ 1.6.x，手动下载安装到 <code class="inline">ASPECTJ_HOME</code></li>
-        <li>Ant + <code class="inline">iajc</code> 任务，或非常旧的 Maven <code class="inline">aspectj-maven-plugin</code></li>
-        <li>命令行手敲 <code class="inline">ajc -source 5 ...</code></li>
+        <li>AspectJ 1.6.x，手动下载安装到 <code>ASPECTJ_HOME</code></li>
+        <li>Ant + <code>iajc</code> 任务，或非常旧的 Maven <code>aspectj-maven-plugin</code></li>
+        <li>命令行手敲 <code>ajc -source 5 ...</code></li>
       </ul>
     </div>
-    <div class="col new">
-      <div class="tag">推荐的现代写法</div>
+    <div class="new">
+      <div class="h">推荐的现代写法</div>
       <ul>
         <li>AspectJ 1.9.x，作为 Maven 依赖引入，无需单独安装</li>
-        <li>Maven：<code class="inline">dev.aspectj:aspectj-maven-plugin</code>（老牌的 <code class="inline">org.codehaus.mojo:aspectj-maven-plugin</code> 已多年未更新，这是社区活跃维护的替代品）</li>
-        <li>Gradle：<code class="inline">io.freefair.aspectj</code> 插件</li>
+        <li>Maven：<code>dev.aspectj:aspectj-maven-plugin</code>（老牌的 <code>org.codehaus.mojo:aspectj-maven-plugin</code> 已多年未更新，这是社区活跃维护的替代品）</li>
+        <li>Gradle：<code>io.freefair.aspectj</code> 插件</li>
       </ul>
     </div>
   </div>
   <div class="code">
-    <div class="file">pom.xml（关键片段，目标 Java 17）</div>
+    <div class="bar"><span class="tag">pom.xml（关键片段，目标 Java 17）</span></div>
     <pre><code>&lt;properties&gt;
   &lt;aspectj.version&gt;1.9.22.1&lt;/aspectj.version&gt;
 &lt;/properties&gt;
@@ -573,38 +679,38 @@ table.tbl th { background: var(--bg-code-header); }
   &lt;/plugins&gt;
 &lt;/build&gt;</code></pre>
   </div>
-  <div class="callout warn">
-    <span class="label">⚠️ 版本号仅供参考</span>
+  <div class="box warn">
+    <div class="t">⚠️ 版本号仅供参考</div>
     <p>
-      AspectJ 和 <code class="inline">dev.aspectj:aspectj-maven-plugin</code> 都在持续发布新版本，实际项目里请到 Maven Central
+      AspectJ 和 <code>dev.aspectj:aspectj-maven-plugin</code> 都在持续发布新版本，实际项目里请到 Maven Central
       查询当时的最新版本号，不要把本笔记里的版本号当成“永远最新”。
     </p>
   </div>
 
   <h2>6. 一个预告：Spring 不需要 ajc 也能跑 @AspectJ 语法</h2>
   <p>
-    如果你的 <code class="inline">SecurityAspect</code> 是用 <code class="inline">@AspectJ</code> 注解写的，Spring 容器可以直接识别它，
-    在 <code class="inline">@Configuration</code> 类上加一行 <code class="inline">@EnableAspectJAutoProxy</code>（对应书中 XML 时代的
-    <code class="inline">&lt;aop:aspectj-autoproxy/&gt;</code>），Spring 就会给 <code class="inline">MessageCommunicator</code> 这个 Bean
-    自动生成一个代理对象，在方法调用前后插入切面逻辑——<strong>全程不需要 AspectJ 编译器，也不需要 <code class="inline">-javaagent</code></strong>。
+    如果你的 <code>SecurityAspect</code> 是用 <code>@AspectJ</code> 注解写的，Spring 容器可以直接识别它，
+    在 <code>@Configuration</code> 类上加一行 <code>@EnableAspectJAutoProxy</code>（对应书中 XML 时代的
+    <code>&lt;aop:aspectj-autoproxy/&gt;</code>），Spring 就会给 <code>MessageCommunicator</code> 这个 Bean
+    自动生成一个代理对象，在方法调用前后插入切面逻辑——<strong>全程不需要 AspectJ 编译器，也不需要 <code>-javaagent</code></strong>。
     代价是：它只能拦截“方法执行”这一种连接点，而且只对 Spring 容器管理的 Bean 生效。这是第 9 章的主角，这里先有个印象即可。
   </p>
 
   <div class="exercise">
-    <span class="label">✏️ 动手练习</span>
+    <h3>✏️ 动手练习</h3>
     <p>
-      打开仓库里的 <code class="inline">ch02/workspace/Section2.1.2AddingAnAspect</code>，把 <code class="inline">pom.xml</code>
-      换成本节的现代化片段，用 <code class="inline">mvn compile exec:java -Dexec.mainClass=ajia.main.Main</code> 跑一遍，
+      打开仓库里的 <code>ch02/workspace/Section2.1.2AddingAnAspect</code>，把 <code>pom.xml</code>
+      换成本节的现代化片段，用 <code>mvn compile exec:java -Dexec.mainClass=ajia.main.Main</code> 跑一遍，
       观察控制台是否先打印出“Checking and authenticating user”再打印消息内容。
-      然后再看看 <code class="inline">ch02/workspace/Section2.2.3InterTypeDeclaration</code> 里的 <code class="inline">TrackingAspect.aj</code>——
+      然后再看看 <code>ch02/workspace/Section2.2.3InterTypeDeclaration</code> 里的 <code>TrackingAspect.aj</code>——
       它演示了第 5 章才会详细讲的“类型间声明”，可以先睹为快。
     </p>
   </div>
 
   <h2>小结 &amp; 自测</h2>
   <ul class="quiz">
-    <li class="q"><code class="inline">execution(* MessageCommunicator.deliver(..))</code> 里两个 <code class="inline">*</code>/<code class="inline">..</code> 分别是什么意思？
-      <div class="a"><code class="inline">*</code> 通配返回值类型（任意类型都行）；<code class="inline">..</code> 通配参数列表（任意数量、任意类型的参数）。</div>
+    <li class="q"><code>execution(* MessageCommunicator.deliver(..))</code> 里两个 <code>*</code>/<code>..</code> 分别是什么意思？
+      <div class="a"><code>*</code> 通配返回值类型（任意类型都行）；<code>..</code> 通配参数列表（任意数量、任意类型的参数）。</div>
     </li>
     <li class="q">为什么单用 javac 编译 @AspectJ 语法的类，切面不会生效？
       <div class="a">javac 只认识极少数标准注解（如 @Override），不理解 @Aspect/@Before 的语义。必须再经过一个织入器（ajc）或者依赖 Spring AOP 的代理机制，才能让切面逻辑真正接入执行路径。</div>
@@ -620,16 +726,143 @@ table.tbl th { background: var(--bg-code-header); }
     </li>
   </ul>
 
-  <div class="pagenav">
-    <a class="prev" href="ch01.html"><span class="lbl">上一章</span>第 1 章：发现 AOP</a>
-    <a class="next" href="ch03.html"><span class="lbl">下一章</span>第 3 章：理解连接点模型</a>
+  <div class="pager">
+    <a class="prev" href="ch01.html"><span>上一章</span>第 1 章：发现 AOP</a>
+    <a class="next" href="ch03.html"><span>下一章</span>第 3 章：理解连接点模型</a>
   </div>
+</main>
 </div>
 <script>
-document.addEventListener("click", function (e) {
-  var q = e.target.closest(".quiz .q");
-  if (q) q.parentElement.classList.toggle("open");
-});
+/* ================================================================
+   AspectJ in Action 图解笔记 · 页面脚本：侧边栏、目录、代码块、主题、自测题
+   ================================================================ */
+// 保持经典 <script> 而不是 type="module"：模块脚本在 file:// 下会被浏览器拦截，
+// 而这些页面经常是直接双击打开的。
+(() => {
+  'use strict';
+
+  const CHAPTERS = [
+    { id: 'ch01', n: '1',  t: '发现 AOP',              part: '第一部分 · 理解 AOP 与 AspectJ' },
+    { id: 'ch02', n: '2',  t: '初识 AspectJ' },
+    { id: 'ch03', n: '3',  t: '理解连接点模型' },
+    { id: 'ch04', n: '4',  t: '用动态切面修改行为' },
+    { id: 'ch05', n: '5',  t: '用静态切面修改结构' },
+    { id: 'ch06', n: '6',  t: '把切面拼在一起' },
+    { id: 'ch07', n: '7',  t: '深入 @AspectJ 注解语法' },
+    { id: 'ch08', n: '8',  t: 'AspectJ 的织入方式' },
+    { id: 'ch09', n: '9',  t: '与 Spring 集成' },
+    { id: 'ch10', n: '10', t: '监控类切面',            part: '第二部分 · 解决实际问题' },
+    { id: 'ch11', n: '11', t: '用切面强制执行规范' },
+    { id: 'ch12', n: '12', t: '切面设计模式' },
+    { id: 'ch13', n: '13', t: '并发控制' },
+    { id: 'ch14', n: '14', t: '事务管理' },
+    { id: 'ch15', n: '15', t: '应用安全' },
+    { id: 'ch16', n: '16', t: '改善领域逻辑' },
+    { id: 'ch17', n: '17', t: '迈出下一步' },
+    { id: 'appendixA',  n: 'A',   t: '搭建示例工程',      part: '附录' },
+    { id: 'appendixBC', n: 'B/C', t: '构建工具：Ant vs. Maven' }
+  ];
+
+  const cur = document.body.dataset.page || '';
+
+  /* ---------- 侧边栏 ---------- */
+  const side = document.getElementById('sidebar');
+  if (side) {
+    const brand = '<a class="brand" href="index.html"><span class="logo">AJ</span>' +
+      '<span>AspectJ 图解笔记<small>AspectJ in Action · 现代化重读</small></span></a>';
+    const links = CHAPTERS.map(({ id, n, t, part }) =>
+      (part ? `<div class="part">${part}</div>` : '') +
+      `<a class="ch${id === cur ? ' active' : ''}" href="${id}.html"><span class="n">${n}</span><span>${t}</span></a>`
+    );
+    side.innerHTML = brand + links.join('');
+    const active = side.querySelector('a.ch.active');
+    if (active) setTimeout(() => active.scrollIntoView({ block: 'center' }), 0);
+  }
+
+  /* ---------- 移动端菜单 ---------- */
+  const btn = Object.assign(document.createElement('button'), {
+    id: 'menu-btn',
+    type: 'button',
+    innerHTML: '&#9776;',
+    onclick: () => document.body.classList.toggle('nav-open')
+  });
+  btn.setAttribute('aria-label', '目录');
+  document.body.appendChild(btn);
+  document.addEventListener('click', (e) => {
+    if (document.body.classList.contains('nav-open') &&
+        side && !side.contains(e.target) && e.target !== btn) {
+      document.body.classList.remove('nav-open');
+    }
+  });
+
+  /* ---------- 主题切换 ---------- */
+  const THEME_KEY = 'ajia-doc-theme';
+  const tbtn = Object.assign(document.createElement('button'), {
+    id: 'theme-btn',
+    type: 'button',
+    innerHTML: '&#9789;',
+    onclick: () => {
+      const root = document.documentElement;
+      const now = root.getAttribute('data-theme');
+      const dark = now ? now === 'dark'
+        : window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const next = dark ? 'light' : 'dark';
+      root.setAttribute('data-theme', next);
+      try { localStorage.setItem(THEME_KEY, next); } catch {}
+    }
+  });
+  tbtn.setAttribute('aria-label', '切换深浅色');
+  document.body.appendChild(tbtn);
+  try {
+    const saved = localStorage.getItem(THEME_KEY);
+    if (saved) document.documentElement.setAttribute('data-theme', saved);
+  } catch {}
+
+  /* ---------- 章节内目录 ---------- */
+  const main = document.querySelector('main');
+  const slot = document.getElementById('chapter-toc');
+  if (slot && main) {
+    const hs = [...main.querySelectorAll('h2')];
+    if (hs.length > 2) {
+      const items = hs.map((h, i) => {
+        if (!h.id) h.id = `sec-${i + 1}`;
+        return `<li><a href="#${h.id}">${h.textContent.replace(/^\d+\.\s*/, '')}</a></li>`;
+      });
+      slot.className = 'toc';
+      slot.innerHTML = `<div class="h">本章目录</div><ol>${items.join('')}</ol>`;
+    }
+  }
+
+  /* ---------- 代码块：复制按钮 ---------- */
+  document.querySelectorAll('.code').forEach((box) => {
+    const pre = box.querySelector('pre');
+    if (!pre) return;
+    let bar = box.querySelector(':scope > .bar');
+    if (!bar) {
+      bar = Object.assign(document.createElement('div'), { className: 'bar' });
+      bar.innerHTML = '<span class="tag">code</span>';
+      box.insertBefore(bar, pre);
+    }
+    const cp = Object.assign(document.createElement('button'), {
+      className: 'copy',
+      type: 'button',
+      textContent: '复制'
+    });
+    cp.onclick = () => {
+      navigator.clipboard?.writeText(pre.textContent);
+      cp.textContent = '已复制';
+      setTimeout(() => { cp.textContent = '复制'; }, 1400);
+    };
+    bar.appendChild(cp);
+  });
+
+  /* ---------- 自测题：点击题目展开 / 收起答案 ---------- */
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('.quiz .a')) return;   // 允许在答案里选中文字
+    const li = e.target.closest('.quiz > li');
+    if (li) li.classList.toggle('open');
+  });
+})();
 </script>
 </body>
 </html>

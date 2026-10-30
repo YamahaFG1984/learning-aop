@@ -5,334 +5,440 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>附录 B/C：构建工具 Ant vs. Maven | AspectJ in Action 图解笔记</title>
 <style>
-/* AspectJ in Action -- beginner-friendly chapter guide styles
-   Shared by index.html and every chXX.html / appendix*.html page. */
+/* ================================================================
+   AspectJ in Action 图解笔记 · 页面样式
+   每个页面内联同一份样式，单独拷出去也能打开。
+   ================================================================ */
 
+/* 每个颜色用 light-dark(浅色值, 深色值) 写一次，由 color-scheme 决定取哪一个：
+   默认跟随系统，脚本写入的 data-theme 可以强制指定。 */
 :root {
-  --bg: #f6f7fb;
-  --bg-panel: #ffffff;
-  --bg-code: #f0f2f8;
-  --bg-code-header: #e3e7f2;
-  --text: #1c2130;
-  --text-dim: #55607a;
-  --border: #dde1ee;
-  --accent: #5b5bd6;
-  --accent-dim: #eceafc;
-  --accent-text: #3f3fb0;
-  --good: #1a7f5a;
-  --good-bg: #e6f6ef;
-  --warn: #a15c00;
-  --warn-bg: #fdf1de;
-  --old: #b0203a;
-  --old-bg: #fbe9ec;
-  --new: #146c43;
-  --new-bg: #e7f6ee;
-  --shadow: 0 1px 2px rgba(30, 34, 54, 0.06), 0 8px 24px rgba(30, 34, 54, 0.05);
-  --radius: 14px;
   color-scheme: light dark;
-}
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #14161f;
-    --bg-panel: #1b1e2a;
-    --bg-code: #11131b;
-    --bg-code-header: #23273a;
-    --text: #e7e9f5;
-    --text-dim: #a4aac4;
-    --border: #2b2f42;
-    --accent: #9090f5;
-    --accent-dim: #262a44;
-    --accent-text: #b3b3fb;
-    --good: #4fd39a;
-    --good-bg: #123527;
-    --warn: #eab766;
-    --warn-bg: #3a2c11;
-    --old: #f18b9a;
-    --old-bg: #3a1620;
-    --new: #7ee2ae;
-    --new-bg: #10301f;
-    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35);
-  }
+  --bg:        light-dark(#fbfaf8, #171513);
+  --panel:     light-dark(#ffffff, #201d1a);
+  --panel-2:   light-dark(#f4f2ee, #2a2521);
+  --fg:        light-dark(#26221e, #ece6de);
+  --fg-soft:   light-dark(#5f584f, #b8afa3);
+  --fg-faint:  light-dark(#8c8377, #8b8378);
+  --line:      light-dark(#e2ddd4, #342e28);
+  --line-2:    light-dark(#cfc8bc, #463e36);
+  --accent:    light-dark(#d95602, #ff8f4d);
+  --accent-bg: light-dark(#fdf0e6, #33231a);
+  --accent-2:  light-dark(#b04503, #ffab77);
+  --green:     light-dark(#2f7d51, #6ac48d);
+  --green-bg:  light-dark(#eaf5ee, #1b2b21);
+  --blue:      light-dark(#2b6cb0, #7fb0e8);
+  --blue-bg:   light-dark(#eaf1f9, #1a232e);
+  --red:       light-dark(#c0392b, #f08076);
+  --red-bg:    light-dark(#fdecea, #2e1c1a);
+  --purple:    light-dark(#6b46c1, #b295ee);
+  --purple-bg: light-dark(#f1ecfb, #241d33);
+  --code-bg:   light-dark(#2b2620, #12100e);
+  --code-fg:   light-dark(#e9e2d8, #e6ded2);
+
+  --radius:    10px;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+          "Liberation Mono", "Noto Sans Mono CJK SC", monospace;
+
+  &[data-theme="light"] { color-scheme: light; }
+  &[data-theme="dark"]  { color-scheme: dark; }
 }
 
 * { box-sizing: border-box; }
 
-html { scroll-behavior: smooth; }
+html { scroll-behavior: smooth; scroll-padding-top: 1.5rem; }
 
 body {
   margin: 0;
   background: var(--bg);
-  color: var(--text);
-  font-family: -apple-system, "PingFang SC", "Segoe UI", "Noto Sans SC", Helvetica, Arial, sans-serif;
-  line-height: 1.75;
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.8;
+  -webkit-font-smoothing: antialiased;
 }
 
-.page {
-  max-width: 880px;
+/* ---------------- 布局 ---------------- */
+
+#app { display: flex; align-items: flex-start; }
+
+#sidebar {
+  --sidebar-w: 268px;
+  position: sticky;
+  top: 0;
+  flex: 0 0 var(--sidebar-w);
+  width: var(--sidebar-w);
+  height: 100dvh;
+  overflow-y: auto;
+  padding: 22px 14px 40px;
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+  font-size: 14px;
+
+  .brand {
+    display: flex; align-items: center; gap: 9px;
+    font-weight: 700; font-size: 16px; letter-spacing: .01em;
+    color: var(--fg); text-decoration: none;
+    padding: 4px 8px 14px;
+
+    .logo {
+      width: 26px; height: 26px; flex: none;
+      display: grid; place-items: center;
+      background: var(--accent); color: #fff; border-radius: 8px;
+      font-size: 12px; font-family: var(--mono); letter-spacing: -.02em;
+    }
+    small { display: block; font-weight: 400; font-size: 11px; color: var(--fg-faint); }
+  }
+
+  .part {
+    margin: 16px 8px 6px; font-size: 11px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--fg-faint); font-weight: 700;
+  }
+
+  a.ch {
+    display: flex; gap: 8px; align-items: baseline;
+    padding: 5px 8px; border-radius: 7px;
+    color: var(--fg-soft); text-decoration: none; line-height: 1.5;
+
+    &:hover  { background: var(--panel-2); color: var(--fg); }
+    &.active { background: var(--accent-bg); color: var(--accent-2); font-weight: 600; }
+
+    .n {
+      flex: none; width: 26px; text-align: right;
+      font-variant-numeric: tabular-nums; font-size: 12px; color: var(--fg-faint);
+    }
+    &.active .n { color: var(--accent); }
+  }
+}
+
+main {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 900px;
+  padding: 40px 44px 100px;
   margin: 0 auto;
-  padding: 28px 20px 90px;
 }
 
-.topbar {
-  max-width: 880px;
-  margin: 0 auto;
-  padding: 14px 20px 0;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 13px;
-  color: var(--text-dim);
+/* 两个悬浮按钮：移动端菜单、深浅色切换 */
+:is(#menu-btn, #theme-btn) {
+  position: fixed;
+  border: 1px solid var(--line-2); background: var(--panel); color: var(--fg);
+  cursor: pointer;
 }
-.topbar a { color: var(--text-dim); text-decoration: none; }
-.topbar a:hover { color: var(--accent-text); }
+#menu-btn {
+  display: none;
+  z-index: 40; inset: 12px auto auto 12px;
+  width: 42px; height: 42px; border-radius: 10px;
+  font-size: 18px;
+}
+#theme-btn {
+  z-index: 30; inset: auto 16px 16px auto;
+  width: 40px; height: 40px; border-radius: 50%;
+  font-size: 16px;
+}
 
-h1, h2, h3, h4 { line-height: 1.35; letter-spacing: -0.01em; }
-h1 { font-size: 30px; margin: 6px 0 6px; }
-h2 { font-size: 22px; margin: 46px 0 14px; padding-top: 10px; border-top: 1px solid var(--border); }
-h3 { font-size: 18px; margin: 30px 0 10px; color: var(--accent-text); }
-h4 { font-size: 15px; margin: 20px 0 8px; }
+@media (width <= 900px) {
+  #menu-btn { display: block; }
+  #sidebar {
+    position: fixed; z-index: 39; inset: 0 auto auto 0;
+    padding-top: 62px;
+    transform: translateX(-102%); transition: transform .22s ease;
+    box-shadow: 0 0 40px rgb(0 0 0 / .28);
+
+    body.nav-open & { transform: none; }
+  }
+  main { padding: 68px 20px 80px; }
+}
+
+/* ---------------- 排版 ---------------- */
+
+h1, h2, h3, h4 { line-height: 1.35; color: var(--fg); }
+h1 { font-size: 30px; margin: 0 0 6px; letter-spacing: -.01em; }
+h2 {
+  font-size: 22px; margin: 52px 0 14px; padding-top: 10px;
+  border-top: 1px solid var(--line);
+
+  &:first-of-type { border-top: none; }
+}
+h3 { font-size: 17.5px; margin: 30px 0 8px; }
+h4 { font-size: 15.5px; margin: 22px 0 6px; color: var(--fg-soft); }
 p { margin: 12px 0; }
-ul, ol { padding-left: 22px; }
-li { margin: 6px 0; }
-a { color: var(--accent-text); }
+ul, ol { padding-left: 1.5em; margin: 12px 0; }
+li { margin: 5px 0; }
+li > :is(ul, ol) { margin: 4px 0; }
+a { color: var(--accent-2); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+hr { border: none; border-top: 1px solid var(--line); margin: 36px 0; }
+:is(strong, b) { font-weight: 700; color: var(--fg); }
 
-.kicker {
-  display: inline-block;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  color: var(--accent-text);
-  background: var(--accent-dim);
-  padding: 3px 10px;
-  border-radius: 999px;
-  margin-bottom: 10px;
+code {
+  font-family: var(--mono); font-size: .875em;
+  background: var(--panel-2); border: 1px solid var(--line);
+  padding: .08em .35em; border-radius: 5px;
+  word-break: break-word;
 }
+pre code { all: unset; font-family: var(--mono); }
 
-.subtitle { color: var(--text-dim); font-size: 16px; margin-top: 0; }
+.chapter-eyebrow {
+  display: inline-block; font-size: 12px; letter-spacing: .14em;
+  text-transform: uppercase; font-weight: 700; color: var(--accent);
+  background: var(--accent-bg); padding: 3px 10px; border-radius: 20px;
+  margin-bottom: 14px;
+}
+.lede { font-size: 17.5px; color: var(--fg-soft); margin: 10px 0 26px; }
 
-.covers {
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px 20px;
-  margin: 20px 0 8px;
-  box-shadow: var(--shadow);
-}
-.covers h4 { margin-top: 0; color: var(--text-dim); font-weight: 600; }
-.covers ul { margin: 6px 0 0; }
+/* ---------------- 代码块 ---------------- */
 
-/* ---- callouts ---- */
-.callout {
-  border-radius: var(--radius);
-  padding: 14px 18px;
-  margin: 18px 0;
-  border: 1px solid var(--border);
-  background: var(--bg-panel);
-}
-.callout > .label {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  margin-bottom: 6px;
-  display: block;
-}
-.callout.tip { background: var(--good-bg); border-color: var(--good); }
-.callout.tip > .label { color: var(--good); }
-.callout.warn { background: var(--warn-bg); border-color: var(--warn); }
-.callout.warn > .label { color: var(--warn); }
-.callout.modern { background: var(--accent-dim); border-color: var(--accent); }
-.callout.modern > .label { color: var(--accent-text); }
-.callout p:first-child { margin-top: 0; }
-.callout p:last-child { margin-bottom: 0; }
-
-/* ---- old vs new version compare table ---- */
-.versus {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin: 16px 0;
-}
-@media (max-width: 620px) { .versus { grid-template-columns: 1fr; } }
-.versus .col {
-  border-radius: var(--radius);
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-}
-.versus .old { background: var(--old-bg); }
-.versus .new { background: var(--new-bg); }
-.versus .col .tag {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-.versus .old .tag { color: var(--old); }
-.versus .new .tag { color: var(--new); }
-.versus .col ul { margin: 8px 0 0; padding-left: 18px; font-size: 14px; }
-
-/* ---- code blocks ---- */
 .code {
+  --code-muted: #b9b0a3;
+  margin: 18px 0;
   border-radius: var(--radius);
   overflow: hidden;
-  margin: 16px 0;
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow);
-}
-.code .file {
-  background: var(--bg-code-header);
-  color: var(--text-dim);
-  font-size: 12px;
-  padding: 7px 14px;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  border-bottom: 1px solid var(--border);
-}
-.code pre {
-  margin: 0;
-  padding: 14px 16px;
-  background: var(--bg-code);
-  overflow-x: auto;
-}
-.code code, pre code {
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  font-size: 13.2px;
-  white-space: pre;
-}
-code.inline {
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  background: var(--bg-code);
-  border: 1px solid var(--border);
-  padding: 1px 6px;
-  border-radius: 6px;
-  font-size: 0.9em;
-}
-.tok-kw { color: #8250df; }
-.tok-ann { color: #966600; font-weight: 600; }
-@media (prefers-color-scheme: dark) { .tok-ann { color: #eab766; } .tok-kw { color: #c9a8ff; } }
-.tok-str { color: #0a7d4b; }
-@media (prefers-color-scheme: dark) { .tok-str { color: #7ee2ae; } }
-.tok-cm { color: var(--text-dim); font-style: italic; }
-.tok-type { color: #0550ae; }
-@media (prefers-color-scheme: dark) { .tok-type { color: #8ab4f8; } }
+  border: 1px solid var(--line-2);
+  background: var(--code-bg);
 
-/* ---- diagrams ---- */
-.diagram {
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px;
-  margin: 20px 0;
-  box-shadow: var(--shadow);
-  overflow-x: auto;
-}
-.diagram svg { display: block; margin: 0 auto; max-width: 100%; height: auto; }
-.diagram .caption {
-  text-align: center;
-  font-size: 12.5px;
-  color: var(--text-dim);
-  margin-top: 10px;
-}
-.diagram text { fill: var(--text); font-family: -apple-system, "PingFang SC", "Noto Sans SC", sans-serif; }
-.diagram .dim { fill: var(--text-dim); }
-.diagram .box { fill: var(--bg-code); stroke: var(--border); }
-.diagram .accentbox { fill: var(--accent-dim); stroke: var(--accent); }
-.diagram .oldbox { fill: var(--old-bg); stroke: var(--old); }
-.diagram .newbox { fill: var(--new-bg); stroke: var(--new); }
-.diagram .arrow { stroke: var(--text-dim); stroke-width: 1.6; fill: none; marker-end: url(#arrow); }
-.diagram .arrow-accent { stroke: var(--accent); stroke-width: 2; fill: none; marker-end: url(#arrowAccent); }
+  > .bar {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 6px 12px;
+    background: rgb(255 255 255 / .05);
+    border-bottom: 1px solid rgb(255 255 255 / .08);
+    font-family: var(--mono); font-size: 11.5px;
+    color: var(--code-muted); letter-spacing: .03em;
 
-table.tbl { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; }
-table.tbl th, table.tbl td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
-table.tbl th { background: var(--bg-code-header); }
+    .tag { color: #d8b48a; font-weight: 600; }
+  }
 
+  pre {
+    margin: 0; padding: 14px 16px; overflow-x: auto;
+    color: var(--code-fg); font-family: var(--mono);
+    font-size: 13.2px; line-height: 1.72;
+    tab-size: 2;
+  }
+
+  .copy {
+    flex: none;
+    border: 1px solid rgb(255 255 255 / .16); background: transparent;
+    color: var(--code-muted); border-radius: 5px; font-size: 11px;
+    padding: 2px 8px; cursor: pointer; font-family: var(--sans);
+
+    &:hover { color: #fff; border-color: rgb(255 255 255 / .4); }
+  }
+}
+
+/* 语法高亮（代码块背景在深浅两种主题下都是深色） */
+.tok-cm   { color: #7f7568; font-style: italic; }
+.tok-str  { color: #b4d68a; }
+.tok-kw   { color: #ff9d5c; }
+.tok-ann  { color: #d7a3e6; }
+.tok-type { color: #e8c07d; }
+
+/* ---------------- 提示块 ---------------- */
+
+/* 各变体只设置颜色变量；没设置时回落到中性的边框和面板色 */
+.box {
+  margin: 20px 0; padding: 14px 18px 14px 16px;
+  border-left: 4px solid var(--box-c, var(--line-2));
+  background: var(--box-bg, var(--panel));
+  border-radius: 0 var(--radius) var(--radius) 0;
+
+  > .t {
+    font-weight: 700; font-size: 14px; margin-bottom: 4px;
+    display: flex; align-items: center; gap: 7px;
+    color: var(--box-t, var(--box-c, currentColor));
+  }
+  p:first-of-type { margin-top: 0; }
+  :is(p, ul, ol):last-child { margin-bottom: 0; }
+
+  &.note { --box-c: var(--blue);   --box-bg: var(--blue-bg); }
+  &.tip  { --box-c: var(--green);  --box-bg: var(--green-bg); }
+  &.warn { --box-c: var(--red);    --box-bg: var(--red-bg); }
+  &.key  { --box-c: var(--accent); --box-bg: var(--accent-bg); --box-t: var(--accent-2); }
+  &.deep { --box-c: var(--purple); --box-bg: var(--purple-bg); }
+}
+
+/* 学习目标 */
+.goals {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 16px 20px; margin: 22px 0 28px;
+
+  h4 { margin: 0 0 8px; color: var(--accent-2); font-size: 14px; letter-spacing: .04em; }
+  ul { margin: 0; }
+}
+
+/* 章节内目录 */
+.toc {
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 12px 18px; margin: 0 0 30px;
+  font-size: 14.5px;
+
+  .h {
+    font-weight: 700; font-size: 12px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--fg-faint); margin-bottom: 6px;
+  }
+  ol { margin: 0; padding-left: 1.3em; }
+  a {
+    color: var(--fg-soft); text-decoration: none;
+    &:hover { color: var(--accent-2); text-decoration: underline; }
+  }
+}
+
+/* ---------------- 表格 ---------------- */
+
+.tw { overflow-x: auto; margin: 20px 0; }
+table {
+  border-collapse: collapse; width: 100%; font-size: 14.5px;
+  background: var(--panel); border-radius: var(--radius); overflow: hidden;
+}
+th, td { padding: 9px 13px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { background: var(--panel-2); font-weight: 700; font-size: 13.5px; white-space: nowrap; }
+tr:last-child td { border-bottom: none; }
+td code { font-size: .86em; }
+
+/* ---------------- 图示 ---------------- */
+
+figure { margin: 26px 0; overflow-x: auto; }
+figure svg { display: block; width: 100%; height: auto; }
+figcaption {
+  margin-top: 8px; font-size: 13px; color: var(--fg-faint); text-align: center;
+}
+
+/* 图里的元素常带自己的 fill / font-size 属性；CSS 会压过这些属性，
+   所以只给没写属性的元素兜底。 */
+.dgm {
+  color: var(--fg-faint);            /* 箭头 marker 用 currentColor */
+
+  :is(.bx, .bx-a, .bx-b, .bx-g, .bx-p, .bx-r, .bx-d) { stroke-width: 1.5; }
+  .bx    { fill: var(--panel);     stroke: var(--line-2); }
+  .bx-a  { fill: var(--accent-bg); stroke: var(--accent); }
+  .bx-b  { fill: var(--blue-bg);   stroke: var(--blue); }
+  .bx-g  { fill: var(--green-bg);  stroke: var(--green); }
+  .bx-p  { fill: var(--purple-bg); stroke: var(--purple); }
+  .bx-r  { fill: var(--red-bg);    stroke: var(--red); }
+  .bx-d  { fill: var(--panel-2);   stroke: var(--line-2); stroke-dasharray: 5 4; }
+
+  :is(.ln, .ln-a, .ln-g, .ln-r) { fill: none; }
+  .ln    { stroke: var(--fg-faint); stroke-width: 1.6; }
+  :is(.ln-a, .ln-g, .ln-r) { stroke-width: 1.8; }
+  .ln-a  { stroke: var(--accent); }
+  .ln-g  { stroke: var(--green); }
+  .ln-r  { stroke: var(--red); }
+
+  text:not([font-family]) { font-family: var(--sans); }
+  text:not([fill])        { fill: var(--fg); }
+  .dim:not([fill])        { fill: var(--fg-soft); }
+}
+
+/* ---------------- 对照卡片 ---------------- */
+
+.vs {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 20px 0;
+
+  @media (width <= 700px) { grid-template-columns: 1fr; }
+
+  > div {
+    border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--panel);
+    > .h { padding: 7px 14px; font-size: 12.5px; font-weight: 700; border-bottom: 1px solid var(--line); }
+    > ul { margin: 10px 14px 12px; padding-left: 1.2em; font-size: 14px; }
+    > pre {
+      margin: 0; padding: 12px 14px; overflow-x: auto;
+      font-family: var(--mono); font-size: 12.5px; line-height: 1.65; white-space: pre-wrap;
+    }
+  }
+  .old > .h { background: var(--panel-2); color: var(--fg-faint); }
+  .new > .h { background: var(--accent-bg); color: var(--accent-2); }
+}
+
+/* 练习 */
 .exercise {
-  background: var(--bg-panel);
-  border: 1px dashed var(--accent);
-  border-radius: var(--radius);
-  padding: 14px 18px;
-  margin: 18px 0;
-}
-.exercise .label { color: var(--accent-text); font-weight: 700; font-size: 13px; }
+  border: 1px dashed var(--accent); background: var(--accent-bg);
+  border-radius: var(--radius); padding: 16px 20px; margin: 30px 0 0;
 
-.quiz { list-style: none; padding-left: 0; }
-.quiz li {
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 10px 14px;
-  margin: 8px 0;
+  h3 { margin: 0 0 8px; color: var(--accent-2); font-size: 16px; }
+  :is(p, ol, ul):last-child { margin-bottom: 0; }
 }
-.quiz .q { font-weight: 600; }
-.quiz .a { color: var(--text-dim); margin-top: 6px; font-size: 14px; display: none; }
-.quiz li.open .a { display: block; }
-.quiz .q::before { content: "▸ "; color: var(--accent); }
 
-.pagenav {
-  display: flex;
-  justify-content: space-between;
-  gap: 14px;
-  margin-top: 56px;
-  padding-top: 20px;
-  border-top: 1px solid var(--border);
-  font-size: 14px;
-}
-.pagenav a {
-  text-decoration: none;
-  color: var(--text);
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 10px 16px;
-  flex: 1;
-  box-shadow: var(--shadow);
-}
-.pagenav a:hover { border-color: var(--accent); }
-.pagenav .lbl { display: block; font-size: 11px; color: var(--text-dim); margin-bottom: 2px; }
-.pagenav .next { text-align: right; }
+/* 自测题：点击题目展开答案 */
+.quiz {
+  list-style: none; padding-left: 0;
 
-.toc-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 14px;
-  margin: 22px 0;
+  > li {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 11px 16px; margin: 10px 0;
+    cursor: pointer;
+
+    &:hover { border-color: var(--accent); }
+    &::before {
+      content: "▸"; display: inline-block; width: 1.1em;
+      color: var(--accent); transition: transform .15s ease;
+    }
+    &.open::before { transform: rotate(90deg); }
+  }
+  .q { font-weight: 600; }
+  .a {
+    display: none; cursor: auto;
+    margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line);
+    color: var(--fg-soft); font-size: 14.5px; font-weight: 400;
+  }
+  li.open .a { display: block; }
 }
+
+/* 章节导航 */
+.pager {
+  display: flex; gap: 12px; margin-top: 54px; padding-top: 22px; border-top: 1px solid var(--line);
+
+  a {
+    flex: 1 1 0; padding: 12px 16px; border: 1px solid var(--line);
+    border-radius: var(--radius); background: var(--panel);
+    text-decoration: none; color: var(--fg); font-size: 14px;
+
+    &:hover { border-color: var(--accent); }
+    span { display: block; font-size: 11.5px; color: var(--fg-faint); margin-bottom: 2px; }
+    &.next { text-align: right; }
+  }
+}
+
+/* 首页 */
+.hero {
+  border: 1px solid var(--line); background: var(--panel);
+  border-radius: 16px; padding: 34px 34px 30px; margin-bottom: 30px;
+
+  h1 { font-size: 34px; }
+  .sub { font-size: 18px; color: var(--fg-soft); margin: 8px 0 0; }
+
+  @media (width <= 700px) { padding: 24px 20px; h1 { font-size: 28px; } }
+}
+.pill {
+  display: inline-block; font-size: 12px; padding: 3px 10px; border-radius: 20px;
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--fg-soft);
+  margin: 3px 5px 3px 0;
+}
+.toc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 .toc-card {
-  display: block;
-  text-decoration: none;
-  color: var(--text);
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px 18px;
-  box-shadow: var(--shadow);
-  transition: transform 0.12s ease, border-color 0.12s ease;
+  display: block; text-decoration: none; color: inherit;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 13px 16px;
+
+  &:hover { border-color: var(--accent); background: var(--accent-bg); }
+  .n { font-size: 11px; letter-spacing: .1em; color: var(--accent); font-weight: 700; }
+  .t { font-weight: 700; font-size: 15.5px; margin: 2px 0 3px; }
+  .d { font-size: 13.5px; color: var(--fg-soft); line-height: 1.6; }
 }
-.toc-card:hover { transform: translateY(-2px); border-color: var(--accent); }
-.toc-card .num { font-size: 12px; color: var(--accent-text); font-weight: 700; }
-.toc-card .ttl { font-size: 16px; font-weight: 700; margin: 4px 0 6px; }
-.toc-card .desc { font-size: 13px; color: var(--text-dim); }
-.toc-part {
-  margin: 34px 0 6px;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: var(--text-dim);
-  text-transform: uppercase;
-}
+.note-small { margin-top: 40px; font-size: 13px; color: var(--fg-faint); }
 </style>
 </head>
-<body>
-<div class="topbar">
-  <a href="index.html">&larr; 全部章节</a>
-  <span>AspectJ in Action · 图解笔记</span>
-</div>
-<div class="page">
+<body data-page="appendixBC">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><marker id="ar-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--accent)"/></marker><marker id="ar-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--green)"/></marker><marker id="ar-r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--red)"/></marker></defs></svg>
+<div id="app">
+<aside id="sidebar"></aside>
+<main>
 
-  <span class="kicker">APPENDIX B / C</span>
+  <span class="chapter-eyebrow">附录 B/C</span>
   <h1>构建工具：Ant vs. Maven</h1>
-  <p class="subtitle">一句话概括：书里用 Ant 和 Maven 各讲了一遍同样的三件事——织入自己的源码、打包一个切面库、织入别人编译好的 jar。Ant 已经过时，今天直接看 Maven（或 Gradle）部分就够了。</p>
+  <p class="lede">一句话概括：书里用 Ant 和 Maven 各讲了一遍同样的三件事——织入自己的源码、打包一个切面库、织入别人编译好的 jar。Ant 已经过时，今天直接看 Maven（或 Gradle）部分就够了。</p>
 
-  <div class="covers">
+  <div class="goals">
     <h4>本章你将学到</h4>
     <ul>
       <li>AspectJ 项目里三种最常见的构建任务是什么</li>
@@ -340,6 +446,8 @@ table.tbl th { background: var(--bg-code-header); }
       <li>现代 AspectJ Maven/Gradle 插件该怎么配置</li>
     </ul>
   </div>
+
+  <div id="chapter-toc"></div>
 
   <h2>1. 为什么这两个附录要一起看</h2>
   <p>
@@ -349,18 +457,17 @@ table.tbl th { background: var(--bg-code-header); }
     所以这一页把附录 B 的内容压缩成一句话背景知识，把篇幅留给 Maven / Gradle 的现代写法。
   </p>
 
-  <div class="callout tip">
-    <span class="label">💡 Ant 部分要不要读？</span>
+  <div class="box tip">
+    <div class="t">💡 Ant 部分要不要读？</div>
     <p>
-      不需要。Ant 版本的 <code class="inline">build.xml</code> 用 <code class="inline">&lt;iajc&gt;</code> 任务手动指定
-      <code class="inline">aspectjtools.jar</code> 路径、手动拼 classpath，属于“看得懂但没必要再学”的历史写法。
-      仓库里 <code class="inline">appendixBandC/workspace/*/build.xml</code> 保留了原始示例，感兴趣可以翻一翻。
+      不需要。Ant 版本的 <code>build.xml</code> 用 <code>&lt;iajc&gt;</code> 任务手动指定
+      <code>aspectjtools.jar</code> 路径、手动拼 classpath，属于“看得懂但没必要再学”的历史写法。
+      仓库里 <code>appendixBandC/workspace/*/build.xml</code> 保留了原始示例，感兴趣可以翻一翻。
     </p>
   </div>
 
   <h2>2. 三种构建任务，一图对比</h2>
-  <div class="diagram">
-    <svg viewBox="0 0 640 280" xmlns="http://www.w3.org/2000/svg">
+  <figure><svg class="dgm" viewBox="0 0 640 280" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <marker id="arrow-appbc-1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
           <path d="M0,0 L6,3 L0,6 Z" fill="currentColor"/>
@@ -368,46 +475,46 @@ table.tbl th { background: var(--bg-code-header); }
       </defs>
 
       <text x="20" y="30" font-size="13" font-weight="bold">① 织入自己的源码</text>
-      <rect class="box" x="20" y="45" width="140" height="40" rx="6"/>
+      <rect class="bx" x="20" y="45" width="140" height="40" rx="6"/>
       <text x="90" y="70" text-anchor="middle" font-size="12">.java + .aj 源码</text>
-      <path class="arrow" d="M160,65 L215,65" marker-end="url(#arrow-appbc-1)"/>
-      <rect class="accentbox" x="220" y="45" width="140" height="40" rx="6"/>
+      <path class="ln" d="M160,65 L215,65" marker-end="url(#arrow-appbc-1)"/>
+      <rect class="bx-a" x="220" y="45" width="140" height="40" rx="6"/>
       <text x="290" y="70" text-anchor="middle" font-size="12">编译期织入</text>
-      <path class="arrow" d="M360,65 L415,65" marker-end="url(#arrow-appbc-1)"/>
-      <rect class="box" x="420" y="45" width="140" height="40" rx="6"/>
+      <path class="ln" d="M360,65 L415,65" marker-end="url(#arrow-appbc-1)"/>
+      <rect class="bx" x="420" y="45" width="140" height="40" rx="6"/>
       <text x="490" y="70" text-anchor="middle" font-size="12">已织入的 .class</text>
 
       <text x="20" y="130" font-size="13" font-weight="bold">② 打包一个可复用的切面库</text>
-      <rect class="box" x="20" y="145" width="140" height="40" rx="6"/>
+      <rect class="bx" x="20" y="145" width="140" height="40" rx="6"/>
       <text x="90" y="170" text-anchor="middle" font-size="12">只有 .aj 切面</text>
-      <path class="arrow" d="M160,165 L215,165" marker-end="url(#arrow-appbc-1)"/>
-      <rect class="accentbox" x="220" y="145" width="140" height="40" rx="6"/>
+      <path class="ln" d="M160,165 L215,165" marker-end="url(#arrow-appbc-1)"/>
+      <rect class="bx-a" x="220" y="145" width="140" height="40" rx="6"/>
       <text x="290" y="170" text-anchor="middle" font-size="12">编译 + 打包</text>
-      <path class="arrow" d="M360,165 L415,165" marker-end="url(#arrow-appbc-1)"/>
-      <rect class="box" x="420" y="145" width="140" height="40" rx="6"/>
+      <path class="ln" d="M360,165 L415,165" marker-end="url(#arrow-appbc-1)"/>
+      <rect class="bx" x="420" y="145" width="140" height="40" rx="6"/>
       <text x="490" y="170" text-anchor="middle" font-size="12">aspect-library.jar</text>
 
       <text x="20" y="230" font-size="13" font-weight="bold">③ 织入别人编译好的 jar（二进制织入）</text>
-      <rect class="box" x="20" y="245" width="140" height="30" rx="6"/>
+      <rect class="bx" x="20" y="245" width="140" height="30" rx="6"/>
       <text x="90" y="265" text-anchor="middle" font-size="11">app.jar（无切面）</text>
-      <rect class="box" x="20" y="245" width="0" height="0"/>
-      <rect class="accentbox" x="220" y="245" width="140" height="30" rx="6"/>
+      <rect class="bx" x="20" y="245" width="0" height="0"/>
+      <rect class="bx-a" x="220" y="245" width="140" height="30" rx="6"/>
       <text x="290" y="265" text-anchor="middle" font-size="11">+ aspect-library.jar</text>
-      <path class="arrow" d="M160,260 L215,260" marker-end="url(#arrow-appbc-1)"/>
-      <path class="arrow" d="M360,260 L415,260" marker-end="url(#arrow-appbc-1)"/>
-      <rect class="box" x="420" y="245" width="140" height="30" rx="6"/>
+      <path class="ln" d="M160,260 L215,260" marker-end="url(#arrow-appbc-1)"/>
+      <path class="ln" d="M360,260 L415,260" marker-end="url(#arrow-appbc-1)"/>
+      <rect class="bx" x="420" y="245" width="140" height="30" rx="6"/>
       <text x="490" y="265" text-anchor="middle" font-size="11">woven-app.jar</text>
     </svg>
-    <div class="caption">图 B/C-1　三种常见构建任务：编译期织入自己的代码 / 打包切面库 / 织入别人的二进制</div>
-  </div>
+    <figcaption>图 B/C-1　三种常见构建任务：编译期织入自己的代码 / 打包切面库 / 织入别人的二进制</figcaption>
+  </figure>
 
   <h2>3. 用现代 Maven 做「编译期织入自己的源码」</h2>
   <p>
-    书中用的是 <code class="inline">org.codehaus.mojo:aspectj-maven-plugin</code>，这个插件早已多年未更新。
-    社区接手维护的现代替代品是 <code class="inline">dev.aspectj:aspectj-maven-plugin</code>，配置方式几乎一样，但持续跟进新版 AspectJ 和新版 Java。
+    书中用的是 <code>org.codehaus.mojo:aspectj-maven-plugin</code>，这个插件早已多年未更新。
+    社区接手维护的现代替代品是 <code>dev.aspectj:aspectj-maven-plugin</code>，配置方式几乎一样，但持续跟进新版 AspectJ 和新版 Java。
   </p>
   <div class="code">
-    <div class="file">pom.xml（编译期织入，Java 17）</div>
+    <div class="bar"><span class="tag">pom.xml（编译期织入，Java 17）</span></div>
     <pre><code>&lt;dependencies&gt;
   &lt;dependency&gt;
     &lt;groupId&gt;org.aspectj&lt;/groupId&gt;
@@ -439,9 +546,9 @@ table.tbl th { background: var(--bg-code-header); }
   &lt;/plugins&gt;
 &lt;/build&gt;</code></pre>
   </div>
-  <p>用 Gradle 的话，等价写法是 <code class="inline">io.freefair.aspectj</code> 插件：</p>
+  <p>用 Gradle 的话，等价写法是 <code>io.freefair.aspectj</code> 插件：</p>
   <div class="code">
-    <div class="file">build.gradle（编译期织入）</div>
+    <div class="bar"><span class="tag">build.gradle（编译期织入）</span></div>
     <pre><code>plugins {
     id 'java'
     id 'io.freefair.aspectj.post-compile-weaving' version '8.10'
@@ -457,10 +564,10 @@ java {
 }</code></pre>
   </div>
 
-  <div class="callout warn">
-    <span class="label">⚠️ 版本提醒</span>
+  <div class="box warn">
+    <div class="t">⚠️ 版本提醒</div>
     <p>
-      AspectJ、<code class="inline">dev.aspectj:aspectj-maven-plugin</code> 和 <code class="inline">io.freefair.aspectj</code>
+      AspectJ、<code>dev.aspectj:aspectj-maven-plugin</code> 和 <code>io.freefair.aspectj</code>
       的具体版本号请以 <a href="https://central.sonatype.com/" target="_blank" rel="noopener">Maven Central</a> 和
       <a href="https://plugins.gradle.org/" target="_blank" rel="noopener">Gradle Plugin Portal</a> 上的最新版本为准，
       不要把本页里的数字当作永远最新的版本。
@@ -473,26 +580,26 @@ java {
   </p>
   <ul>
     <li>
-      <strong>切面库</strong>：一个只包含 <code class="inline">@Aspect</code> 切面、没有具体业务类的普通模块，
-      正常 <code class="inline">mvn install</code> 打成 jar，发布到仓库供别人依赖即可——不需要特殊配置。
+      <strong>切面库</strong>：一个只包含 <code>@Aspect</code> 切面、没有具体业务类的普通模块，
+      正常 <code>mvn install</code> 打成 jar，发布到仓库供别人依赖即可——不需要特殊配置。
     </li>
     <li>
-      <strong>二进制织入</strong>：在使用方项目的 <code class="inline">aspectj-maven-plugin</code> 配置里，
-      用 <code class="inline">&lt;weaveDependencies&gt;</code> 指定要被织入的 jar（对应旧版 <code class="inline">-inpath</code>），
-      用 <code class="inline">&lt;aspectLibraries&gt;</code> 指定切面库（对应旧版 <code class="inline">-aspectpath</code>）——
+      <strong>二进制织入</strong>：在使用方项目的 <code>aspectj-maven-plugin</code> 配置里，
+      用 <code>&lt;weaveDependencies&gt;</code> 指定要被织入的 jar（对应旧版 <code>-inpath</code>），
+      用 <code>&lt;aspectLibraries&gt;</code> 指定切面库（对应旧版 <code>-aspectpath</code>）——
       这部分的配置结构书中和现代版本几乎一致，仓库里
-      <code class="inline">appendixBandC/workspace/SectionB3andC3_2BinaryWeaving/pom.xml</code> 就是一个可以直接参考的例子。
+      <code>appendixBandC/workspace/SectionB3andC3_2BinaryWeaving/pom.xml</code> 就是一个可以直接参考的例子。
     </li>
   </ul>
 
   <div class="exercise">
-    <span class="label">✏️ 动手练习</span>
+    <h3>✏️ 动手练习</h3>
     <p>
-      打开仓库里 <code class="inline">appendixBandC/workspace/SectionB1andC1SourceCodeBuildTimeWeaving/pom.xml</code>，
-      对比它和上面「编译期织入」代码块的差异（主要是 <code class="inline">groupId</code> 从
-      <code class="inline">org.codehaus.mojo</code> 换成了 <code class="inline">dev.aspectj</code>，
-      <code class="inline">source</code>/<code class="inline">target</code> 从 <code class="inline">1.5</code> 升级到 <code class="inline">17</code>），
-      试着把这个 pom.xml 改成现代写法，本地跑一次 <code class="inline">mvn compile</code> 看能否成功织入。
+      打开仓库里 <code>appendixBandC/workspace/SectionB1andC1SourceCodeBuildTimeWeaving/pom.xml</code>，
+      对比它和上面「编译期织入」代码块的差异（主要是 <code>groupId</code> 从
+      <code>org.codehaus.mojo</code> 换成了 <code>dev.aspectj</code>，
+      <code>source</code>/<code>target</code> 从 <code>1.5</code> 升级到 <code>17</code>），
+      试着把这个 pom.xml 改成现代写法，本地跑一次 <code>mvn compile</code> 看能否成功织入。
     </p>
   </div>
 
@@ -504,24 +611,151 @@ java {
     <li class="q">今天还需要学 Ant 部分吗？
       <div class="a">不需要。现代 Java 项目基本都用 Maven 或 Gradle，Ant 属于可以跳过的历史知识，了解“它曾经存在过”即可。</div>
     </li>
-    <li class="q">书中的 <code class="inline">org.codehaus.mojo:aspectj-maven-plugin</code> 现在还推荐用吗？
-      <div class="a">不推荐，该插件已多年缺乏更新。社区维护的现代替代是 <code class="inline">dev.aspectj:aspectj-maven-plugin</code>，配置方式高度相似但持续跟进新版 AspectJ 和 Java。</div>
+    <li class="q">书中的 <code>org.codehaus.mojo:aspectj-maven-plugin</code> 现在还推荐用吗？
+      <div class="a">不推荐，该插件已多年缺乏更新。社区维护的现代替代是 <code>dev.aspectj:aspectj-maven-plugin</code>，配置方式高度相似但持续跟进新版 AspectJ 和 Java。</div>
     </li>
     <li class="q">"weaveDependencies" 和 "aspectLibraries" 分别对应 ajc 编译器的哪两个旧选项？
-      <div class="a">分别对应 <code class="inline">-inpath</code>（指定要被织入的已编译代码/jar）和 <code class="inline">-aspectpath</code>（指定作为切面库使用的 jar）。</div>
+      <div class="a">分别对应 <code>-inpath</code>（指定要被织入的已编译代码/jar）和 <code>-aspectpath</code>（指定作为切面库使用的 jar）。</div>
     </li>
   </ul>
 
-  <div class="pagenav">
-    <a class="prev" href="appendixA.html"><span class="lbl">上一章</span>附录 A：搭建示例工程</a>
-    <a class="next" href="index.html"><span class="lbl">返回首页</span>全部章节 · 完成阅读 🎉</a>
+  <div class="pager">
+    <a class="prev" href="appendixA.html"><span>上一章</span>附录 A：搭建示例工程</a>
+    <a class="next" href="index.html"><span>返回首页</span>全部章节 · 完成阅读 🎉</a>
   </div>
+</main>
 </div>
 <script>
-document.addEventListener("click", function (e) {
-  var q = e.target.closest(".quiz .q");
-  if (q) q.parentElement.classList.toggle("open");
-});
+/* ================================================================
+   AspectJ in Action 图解笔记 · 页面脚本：侧边栏、目录、代码块、主题、自测题
+   ================================================================ */
+// 保持经典 <script> 而不是 type="module"：模块脚本在 file:// 下会被浏览器拦截，
+// 而这些页面经常是直接双击打开的。
+(() => {
+  'use strict';
+
+  const CHAPTERS = [
+    { id: 'ch01', n: '1',  t: '发现 AOP',              part: '第一部分 · 理解 AOP 与 AspectJ' },
+    { id: 'ch02', n: '2',  t: '初识 AspectJ' },
+    { id: 'ch03', n: '3',  t: '理解连接点模型' },
+    { id: 'ch04', n: '4',  t: '用动态切面修改行为' },
+    { id: 'ch05', n: '5',  t: '用静态切面修改结构' },
+    { id: 'ch06', n: '6',  t: '把切面拼在一起' },
+    { id: 'ch07', n: '7',  t: '深入 @AspectJ 注解语法' },
+    { id: 'ch08', n: '8',  t: 'AspectJ 的织入方式' },
+    { id: 'ch09', n: '9',  t: '与 Spring 集成' },
+    { id: 'ch10', n: '10', t: '监控类切面',            part: '第二部分 · 解决实际问题' },
+    { id: 'ch11', n: '11', t: '用切面强制执行规范' },
+    { id: 'ch12', n: '12', t: '切面设计模式' },
+    { id: 'ch13', n: '13', t: '并发控制' },
+    { id: 'ch14', n: '14', t: '事务管理' },
+    { id: 'ch15', n: '15', t: '应用安全' },
+    { id: 'ch16', n: '16', t: '改善领域逻辑' },
+    { id: 'ch17', n: '17', t: '迈出下一步' },
+    { id: 'appendixA',  n: 'A',   t: '搭建示例工程',      part: '附录' },
+    { id: 'appendixBC', n: 'B/C', t: '构建工具：Ant vs. Maven' }
+  ];
+
+  const cur = document.body.dataset.page || '';
+
+  /* ---------- 侧边栏 ---------- */
+  const side = document.getElementById('sidebar');
+  if (side) {
+    const brand = '<a class="brand" href="index.html"><span class="logo">AJ</span>' +
+      '<span>AspectJ 图解笔记<small>AspectJ in Action · 现代化重读</small></span></a>';
+    const links = CHAPTERS.map(({ id, n, t, part }) =>
+      (part ? `<div class="part">${part}</div>` : '') +
+      `<a class="ch${id === cur ? ' active' : ''}" href="${id}.html"><span class="n">${n}</span><span>${t}</span></a>`
+    );
+    side.innerHTML = brand + links.join('');
+    const active = side.querySelector('a.ch.active');
+    if (active) setTimeout(() => active.scrollIntoView({ block: 'center' }), 0);
+  }
+
+  /* ---------- 移动端菜单 ---------- */
+  const btn = Object.assign(document.createElement('button'), {
+    id: 'menu-btn',
+    type: 'button',
+    innerHTML: '&#9776;',
+    onclick: () => document.body.classList.toggle('nav-open')
+  });
+  btn.setAttribute('aria-label', '目录');
+  document.body.appendChild(btn);
+  document.addEventListener('click', (e) => {
+    if (document.body.classList.contains('nav-open') &&
+        side && !side.contains(e.target) && e.target !== btn) {
+      document.body.classList.remove('nav-open');
+    }
+  });
+
+  /* ---------- 主题切换 ---------- */
+  const THEME_KEY = 'ajia-doc-theme';
+  const tbtn = Object.assign(document.createElement('button'), {
+    id: 'theme-btn',
+    type: 'button',
+    innerHTML: '&#9789;',
+    onclick: () => {
+      const root = document.documentElement;
+      const now = root.getAttribute('data-theme');
+      const dark = now ? now === 'dark'
+        : window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const next = dark ? 'light' : 'dark';
+      root.setAttribute('data-theme', next);
+      try { localStorage.setItem(THEME_KEY, next); } catch {}
+    }
+  });
+  tbtn.setAttribute('aria-label', '切换深浅色');
+  document.body.appendChild(tbtn);
+  try {
+    const saved = localStorage.getItem(THEME_KEY);
+    if (saved) document.documentElement.setAttribute('data-theme', saved);
+  } catch {}
+
+  /* ---------- 章节内目录 ---------- */
+  const main = document.querySelector('main');
+  const slot = document.getElementById('chapter-toc');
+  if (slot && main) {
+    const hs = [...main.querySelectorAll('h2')];
+    if (hs.length > 2) {
+      const items = hs.map((h, i) => {
+        if (!h.id) h.id = `sec-${i + 1}`;
+        return `<li><a href="#${h.id}">${h.textContent.replace(/^\d+\.\s*/, '')}</a></li>`;
+      });
+      slot.className = 'toc';
+      slot.innerHTML = `<div class="h">本章目录</div><ol>${items.join('')}</ol>`;
+    }
+  }
+
+  /* ---------- 代码块：复制按钮 ---------- */
+  document.querySelectorAll('.code').forEach((box) => {
+    const pre = box.querySelector('pre');
+    if (!pre) return;
+    let bar = box.querySelector(':scope > .bar');
+    if (!bar) {
+      bar = Object.assign(document.createElement('div'), { className: 'bar' });
+      bar.innerHTML = '<span class="tag">code</span>';
+      box.insertBefore(bar, pre);
+    }
+    const cp = Object.assign(document.createElement('button'), {
+      className: 'copy',
+      type: 'button',
+      textContent: '复制'
+    });
+    cp.onclick = () => {
+      navigator.clipboard?.writeText(pre.textContent);
+      cp.textContent = '已复制';
+      setTimeout(() => { cp.textContent = '复制'; }, 1400);
+    };
+    bar.appendChild(cp);
+  });
+
+  /* ---------- 自测题：点击题目展开 / 收起答案 ---------- */
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('.quiz .a')) return;   // 允许在答案里选中文字
+    const li = e.target.closest('.quiz > li');
+    if (li) li.classList.toggle('open');
+  });
+})();
 </script>
 </body>
 </html>

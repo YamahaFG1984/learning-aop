@@ -5,334 +5,440 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>第 6 章：把切面拼在一起 | AspectJ in Action 图解笔记</title>
 <style>
-/* AspectJ in Action -- beginner-friendly chapter guide styles
-   Shared by index.html and every chXX.html / appendix*.html page. */
+/* ================================================================
+   AspectJ in Action 图解笔记 · 页面样式
+   每个页面内联同一份样式，单独拷出去也能打开。
+   ================================================================ */
 
+/* 每个颜色用 light-dark(浅色值, 深色值) 写一次，由 color-scheme 决定取哪一个：
+   默认跟随系统，脚本写入的 data-theme 可以强制指定。 */
 :root {
-  --bg: #f6f7fb;
-  --bg-panel: #ffffff;
-  --bg-code: #f0f2f8;
-  --bg-code-header: #e3e7f2;
-  --text: #1c2130;
-  --text-dim: #55607a;
-  --border: #dde1ee;
-  --accent: #5b5bd6;
-  --accent-dim: #eceafc;
-  --accent-text: #3f3fb0;
-  --good: #1a7f5a;
-  --good-bg: #e6f6ef;
-  --warn: #a15c00;
-  --warn-bg: #fdf1de;
-  --old: #b0203a;
-  --old-bg: #fbe9ec;
-  --new: #146c43;
-  --new-bg: #e7f6ee;
-  --shadow: 0 1px 2px rgba(30, 34, 54, 0.06), 0 8px 24px rgba(30, 34, 54, 0.05);
-  --radius: 14px;
   color-scheme: light dark;
-}
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #14161f;
-    --bg-panel: #1b1e2a;
-    --bg-code: #11131b;
-    --bg-code-header: #23273a;
-    --text: #e7e9f5;
-    --text-dim: #a4aac4;
-    --border: #2b2f42;
-    --accent: #9090f5;
-    --accent-dim: #262a44;
-    --accent-text: #b3b3fb;
-    --good: #4fd39a;
-    --good-bg: #123527;
-    --warn: #eab766;
-    --warn-bg: #3a2c11;
-    --old: #f18b9a;
-    --old-bg: #3a1620;
-    --new: #7ee2ae;
-    --new-bg: #10301f;
-    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35);
-  }
+  --bg:        light-dark(#fbfaf8, #171513);
+  --panel:     light-dark(#ffffff, #201d1a);
+  --panel-2:   light-dark(#f4f2ee, #2a2521);
+  --fg:        light-dark(#26221e, #ece6de);
+  --fg-soft:   light-dark(#5f584f, #b8afa3);
+  --fg-faint:  light-dark(#8c8377, #8b8378);
+  --line:      light-dark(#e2ddd4, #342e28);
+  --line-2:    light-dark(#cfc8bc, #463e36);
+  --accent:    light-dark(#d95602, #ff8f4d);
+  --accent-bg: light-dark(#fdf0e6, #33231a);
+  --accent-2:  light-dark(#b04503, #ffab77);
+  --green:     light-dark(#2f7d51, #6ac48d);
+  --green-bg:  light-dark(#eaf5ee, #1b2b21);
+  --blue:      light-dark(#2b6cb0, #7fb0e8);
+  --blue-bg:   light-dark(#eaf1f9, #1a232e);
+  --red:       light-dark(#c0392b, #f08076);
+  --red-bg:    light-dark(#fdecea, #2e1c1a);
+  --purple:    light-dark(#6b46c1, #b295ee);
+  --purple-bg: light-dark(#f1ecfb, #241d33);
+  --code-bg:   light-dark(#2b2620, #12100e);
+  --code-fg:   light-dark(#e9e2d8, #e6ded2);
+
+  --radius:    10px;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+          "Liberation Mono", "Noto Sans Mono CJK SC", monospace;
+
+  &[data-theme="light"] { color-scheme: light; }
+  &[data-theme="dark"]  { color-scheme: dark; }
 }
 
 * { box-sizing: border-box; }
 
-html { scroll-behavior: smooth; }
+html { scroll-behavior: smooth; scroll-padding-top: 1.5rem; }
 
 body {
   margin: 0;
   background: var(--bg);
-  color: var(--text);
-  font-family: -apple-system, "PingFang SC", "Segoe UI", "Noto Sans SC", Helvetica, Arial, sans-serif;
-  line-height: 1.75;
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.8;
+  -webkit-font-smoothing: antialiased;
 }
 
-.page {
-  max-width: 880px;
+/* ---------------- 布局 ---------------- */
+
+#app { display: flex; align-items: flex-start; }
+
+#sidebar {
+  --sidebar-w: 268px;
+  position: sticky;
+  top: 0;
+  flex: 0 0 var(--sidebar-w);
+  width: var(--sidebar-w);
+  height: 100dvh;
+  overflow-y: auto;
+  padding: 22px 14px 40px;
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+  font-size: 14px;
+
+  .brand {
+    display: flex; align-items: center; gap: 9px;
+    font-weight: 700; font-size: 16px; letter-spacing: .01em;
+    color: var(--fg); text-decoration: none;
+    padding: 4px 8px 14px;
+
+    .logo {
+      width: 26px; height: 26px; flex: none;
+      display: grid; place-items: center;
+      background: var(--accent); color: #fff; border-radius: 8px;
+      font-size: 12px; font-family: var(--mono); letter-spacing: -.02em;
+    }
+    small { display: block; font-weight: 400; font-size: 11px; color: var(--fg-faint); }
+  }
+
+  .part {
+    margin: 16px 8px 6px; font-size: 11px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--fg-faint); font-weight: 700;
+  }
+
+  a.ch {
+    display: flex; gap: 8px; align-items: baseline;
+    padding: 5px 8px; border-radius: 7px;
+    color: var(--fg-soft); text-decoration: none; line-height: 1.5;
+
+    &:hover  { background: var(--panel-2); color: var(--fg); }
+    &.active { background: var(--accent-bg); color: var(--accent-2); font-weight: 600; }
+
+    .n {
+      flex: none; width: 26px; text-align: right;
+      font-variant-numeric: tabular-nums; font-size: 12px; color: var(--fg-faint);
+    }
+    &.active .n { color: var(--accent); }
+  }
+}
+
+main {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 900px;
+  padding: 40px 44px 100px;
   margin: 0 auto;
-  padding: 28px 20px 90px;
 }
 
-.topbar {
-  max-width: 880px;
-  margin: 0 auto;
-  padding: 14px 20px 0;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 13px;
-  color: var(--text-dim);
+/* 两个悬浮按钮：移动端菜单、深浅色切换 */
+:is(#menu-btn, #theme-btn) {
+  position: fixed;
+  border: 1px solid var(--line-2); background: var(--panel); color: var(--fg);
+  cursor: pointer;
 }
-.topbar a { color: var(--text-dim); text-decoration: none; }
-.topbar a:hover { color: var(--accent-text); }
+#menu-btn {
+  display: none;
+  z-index: 40; inset: 12px auto auto 12px;
+  width: 42px; height: 42px; border-radius: 10px;
+  font-size: 18px;
+}
+#theme-btn {
+  z-index: 30; inset: auto 16px 16px auto;
+  width: 40px; height: 40px; border-radius: 50%;
+  font-size: 16px;
+}
 
-h1, h2, h3, h4 { line-height: 1.35; letter-spacing: -0.01em; }
-h1 { font-size: 30px; margin: 6px 0 6px; }
-h2 { font-size: 22px; margin: 46px 0 14px; padding-top: 10px; border-top: 1px solid var(--border); }
-h3 { font-size: 18px; margin: 30px 0 10px; color: var(--accent-text); }
-h4 { font-size: 15px; margin: 20px 0 8px; }
+@media (width <= 900px) {
+  #menu-btn { display: block; }
+  #sidebar {
+    position: fixed; z-index: 39; inset: 0 auto auto 0;
+    padding-top: 62px;
+    transform: translateX(-102%); transition: transform .22s ease;
+    box-shadow: 0 0 40px rgb(0 0 0 / .28);
+
+    body.nav-open & { transform: none; }
+  }
+  main { padding: 68px 20px 80px; }
+}
+
+/* ---------------- 排版 ---------------- */
+
+h1, h2, h3, h4 { line-height: 1.35; color: var(--fg); }
+h1 { font-size: 30px; margin: 0 0 6px; letter-spacing: -.01em; }
+h2 {
+  font-size: 22px; margin: 52px 0 14px; padding-top: 10px;
+  border-top: 1px solid var(--line);
+
+  &:first-of-type { border-top: none; }
+}
+h3 { font-size: 17.5px; margin: 30px 0 8px; }
+h4 { font-size: 15.5px; margin: 22px 0 6px; color: var(--fg-soft); }
 p { margin: 12px 0; }
-ul, ol { padding-left: 22px; }
-li { margin: 6px 0; }
-a { color: var(--accent-text); }
+ul, ol { padding-left: 1.5em; margin: 12px 0; }
+li { margin: 5px 0; }
+li > :is(ul, ol) { margin: 4px 0; }
+a { color: var(--accent-2); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+hr { border: none; border-top: 1px solid var(--line); margin: 36px 0; }
+:is(strong, b) { font-weight: 700; color: var(--fg); }
 
-.kicker {
-  display: inline-block;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  color: var(--accent-text);
-  background: var(--accent-dim);
-  padding: 3px 10px;
-  border-radius: 999px;
-  margin-bottom: 10px;
+code {
+  font-family: var(--mono); font-size: .875em;
+  background: var(--panel-2); border: 1px solid var(--line);
+  padding: .08em .35em; border-radius: 5px;
+  word-break: break-word;
 }
+pre code { all: unset; font-family: var(--mono); }
 
-.subtitle { color: var(--text-dim); font-size: 16px; margin-top: 0; }
+.chapter-eyebrow {
+  display: inline-block; font-size: 12px; letter-spacing: .14em;
+  text-transform: uppercase; font-weight: 700; color: var(--accent);
+  background: var(--accent-bg); padding: 3px 10px; border-radius: 20px;
+  margin-bottom: 14px;
+}
+.lede { font-size: 17.5px; color: var(--fg-soft); margin: 10px 0 26px; }
 
-.covers {
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px 20px;
-  margin: 20px 0 8px;
-  box-shadow: var(--shadow);
-}
-.covers h4 { margin-top: 0; color: var(--text-dim); font-weight: 600; }
-.covers ul { margin: 6px 0 0; }
+/* ---------------- 代码块 ---------------- */
 
-/* ---- callouts ---- */
-.callout {
-  border-radius: var(--radius);
-  padding: 14px 18px;
-  margin: 18px 0;
-  border: 1px solid var(--border);
-  background: var(--bg-panel);
-}
-.callout > .label {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  margin-bottom: 6px;
-  display: block;
-}
-.callout.tip { background: var(--good-bg); border-color: var(--good); }
-.callout.tip > .label { color: var(--good); }
-.callout.warn { background: var(--warn-bg); border-color: var(--warn); }
-.callout.warn > .label { color: var(--warn); }
-.callout.modern { background: var(--accent-dim); border-color: var(--accent); }
-.callout.modern > .label { color: var(--accent-text); }
-.callout p:first-child { margin-top: 0; }
-.callout p:last-child { margin-bottom: 0; }
-
-/* ---- old vs new version compare table ---- */
-.versus {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin: 16px 0;
-}
-@media (max-width: 620px) { .versus { grid-template-columns: 1fr; } }
-.versus .col {
-  border-radius: var(--radius);
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-}
-.versus .old { background: var(--old-bg); }
-.versus .new { background: var(--new-bg); }
-.versus .col .tag {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-.versus .old .tag { color: var(--old); }
-.versus .new .tag { color: var(--new); }
-.versus .col ul { margin: 8px 0 0; padding-left: 18px; font-size: 14px; }
-
-/* ---- code blocks ---- */
 .code {
+  --code-muted: #b9b0a3;
+  margin: 18px 0;
   border-radius: var(--radius);
   overflow: hidden;
-  margin: 16px 0;
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow);
-}
-.code .file {
-  background: var(--bg-code-header);
-  color: var(--text-dim);
-  font-size: 12px;
-  padding: 7px 14px;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  border-bottom: 1px solid var(--border);
-}
-.code pre {
-  margin: 0;
-  padding: 14px 16px;
-  background: var(--bg-code);
-  overflow-x: auto;
-}
-.code code, pre code {
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  font-size: 13.2px;
-  white-space: pre;
-}
-code.inline {
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  background: var(--bg-code);
-  border: 1px solid var(--border);
-  padding: 1px 6px;
-  border-radius: 6px;
-  font-size: 0.9em;
-}
-.tok-kw { color: #8250df; }
-.tok-ann { color: #966600; font-weight: 600; }
-@media (prefers-color-scheme: dark) { .tok-ann { color: #eab766; } .tok-kw { color: #c9a8ff; } }
-.tok-str { color: #0a7d4b; }
-@media (prefers-color-scheme: dark) { .tok-str { color: #7ee2ae; } }
-.tok-cm { color: var(--text-dim); font-style: italic; }
-.tok-type { color: #0550ae; }
-@media (prefers-color-scheme: dark) { .tok-type { color: #8ab4f8; } }
+  border: 1px solid var(--line-2);
+  background: var(--code-bg);
 
-/* ---- diagrams ---- */
-.diagram {
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px;
-  margin: 20px 0;
-  box-shadow: var(--shadow);
-  overflow-x: auto;
-}
-.diagram svg { display: block; margin: 0 auto; max-width: 100%; height: auto; }
-.diagram .caption {
-  text-align: center;
-  font-size: 12.5px;
-  color: var(--text-dim);
-  margin-top: 10px;
-}
-.diagram text { fill: var(--text); font-family: -apple-system, "PingFang SC", "Noto Sans SC", sans-serif; }
-.diagram .dim { fill: var(--text-dim); }
-.diagram .box { fill: var(--bg-code); stroke: var(--border); }
-.diagram .accentbox { fill: var(--accent-dim); stroke: var(--accent); }
-.diagram .oldbox { fill: var(--old-bg); stroke: var(--old); }
-.diagram .newbox { fill: var(--new-bg); stroke: var(--new); }
-.diagram .arrow { stroke: var(--text-dim); stroke-width: 1.6; fill: none; marker-end: url(#arrow); }
-.diagram .arrow-accent { stroke: var(--accent); stroke-width: 2; fill: none; marker-end: url(#arrowAccent); }
+  > .bar {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 6px 12px;
+    background: rgb(255 255 255 / .05);
+    border-bottom: 1px solid rgb(255 255 255 / .08);
+    font-family: var(--mono); font-size: 11.5px;
+    color: var(--code-muted); letter-spacing: .03em;
 
-table.tbl { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; }
-table.tbl th, table.tbl td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
-table.tbl th { background: var(--bg-code-header); }
+    .tag { color: #d8b48a; font-weight: 600; }
+  }
 
+  pre {
+    margin: 0; padding: 14px 16px; overflow-x: auto;
+    color: var(--code-fg); font-family: var(--mono);
+    font-size: 13.2px; line-height: 1.72;
+    tab-size: 2;
+  }
+
+  .copy {
+    flex: none;
+    border: 1px solid rgb(255 255 255 / .16); background: transparent;
+    color: var(--code-muted); border-radius: 5px; font-size: 11px;
+    padding: 2px 8px; cursor: pointer; font-family: var(--sans);
+
+    &:hover { color: #fff; border-color: rgb(255 255 255 / .4); }
+  }
+}
+
+/* 语法高亮（代码块背景在深浅两种主题下都是深色） */
+.tok-cm   { color: #7f7568; font-style: italic; }
+.tok-str  { color: #b4d68a; }
+.tok-kw   { color: #ff9d5c; }
+.tok-ann  { color: #d7a3e6; }
+.tok-type { color: #e8c07d; }
+
+/* ---------------- 提示块 ---------------- */
+
+/* 各变体只设置颜色变量；没设置时回落到中性的边框和面板色 */
+.box {
+  margin: 20px 0; padding: 14px 18px 14px 16px;
+  border-left: 4px solid var(--box-c, var(--line-2));
+  background: var(--box-bg, var(--panel));
+  border-radius: 0 var(--radius) var(--radius) 0;
+
+  > .t {
+    font-weight: 700; font-size: 14px; margin-bottom: 4px;
+    display: flex; align-items: center; gap: 7px;
+    color: var(--box-t, var(--box-c, currentColor));
+  }
+  p:first-of-type { margin-top: 0; }
+  :is(p, ul, ol):last-child { margin-bottom: 0; }
+
+  &.note { --box-c: var(--blue);   --box-bg: var(--blue-bg); }
+  &.tip  { --box-c: var(--green);  --box-bg: var(--green-bg); }
+  &.warn { --box-c: var(--red);    --box-bg: var(--red-bg); }
+  &.key  { --box-c: var(--accent); --box-bg: var(--accent-bg); --box-t: var(--accent-2); }
+  &.deep { --box-c: var(--purple); --box-bg: var(--purple-bg); }
+}
+
+/* 学习目标 */
+.goals {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 16px 20px; margin: 22px 0 28px;
+
+  h4 { margin: 0 0 8px; color: var(--accent-2); font-size: 14px; letter-spacing: .04em; }
+  ul { margin: 0; }
+}
+
+/* 章节内目录 */
+.toc {
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 12px 18px; margin: 0 0 30px;
+  font-size: 14.5px;
+
+  .h {
+    font-weight: 700; font-size: 12px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--fg-faint); margin-bottom: 6px;
+  }
+  ol { margin: 0; padding-left: 1.3em; }
+  a {
+    color: var(--fg-soft); text-decoration: none;
+    &:hover { color: var(--accent-2); text-decoration: underline; }
+  }
+}
+
+/* ---------------- 表格 ---------------- */
+
+.tw { overflow-x: auto; margin: 20px 0; }
+table {
+  border-collapse: collapse; width: 100%; font-size: 14.5px;
+  background: var(--panel); border-radius: var(--radius); overflow: hidden;
+}
+th, td { padding: 9px 13px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { background: var(--panel-2); font-weight: 700; font-size: 13.5px; white-space: nowrap; }
+tr:last-child td { border-bottom: none; }
+td code { font-size: .86em; }
+
+/* ---------------- 图示 ---------------- */
+
+figure { margin: 26px 0; overflow-x: auto; }
+figure svg { display: block; width: 100%; height: auto; }
+figcaption {
+  margin-top: 8px; font-size: 13px; color: var(--fg-faint); text-align: center;
+}
+
+/* 图里的元素常带自己的 fill / font-size 属性；CSS 会压过这些属性，
+   所以只给没写属性的元素兜底。 */
+.dgm {
+  color: var(--fg-faint);            /* 箭头 marker 用 currentColor */
+
+  :is(.bx, .bx-a, .bx-b, .bx-g, .bx-p, .bx-r, .bx-d) { stroke-width: 1.5; }
+  .bx    { fill: var(--panel);     stroke: var(--line-2); }
+  .bx-a  { fill: var(--accent-bg); stroke: var(--accent); }
+  .bx-b  { fill: var(--blue-bg);   stroke: var(--blue); }
+  .bx-g  { fill: var(--green-bg);  stroke: var(--green); }
+  .bx-p  { fill: var(--purple-bg); stroke: var(--purple); }
+  .bx-r  { fill: var(--red-bg);    stroke: var(--red); }
+  .bx-d  { fill: var(--panel-2);   stroke: var(--line-2); stroke-dasharray: 5 4; }
+
+  :is(.ln, .ln-a, .ln-g, .ln-r) { fill: none; }
+  .ln    { stroke: var(--fg-faint); stroke-width: 1.6; }
+  :is(.ln-a, .ln-g, .ln-r) { stroke-width: 1.8; }
+  .ln-a  { stroke: var(--accent); }
+  .ln-g  { stroke: var(--green); }
+  .ln-r  { stroke: var(--red); }
+
+  text:not([font-family]) { font-family: var(--sans); }
+  text:not([fill])        { fill: var(--fg); }
+  .dim:not([fill])        { fill: var(--fg-soft); }
+}
+
+/* ---------------- 对照卡片 ---------------- */
+
+.vs {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 20px 0;
+
+  @media (width <= 700px) { grid-template-columns: 1fr; }
+
+  > div {
+    border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--panel);
+    > .h { padding: 7px 14px; font-size: 12.5px; font-weight: 700; border-bottom: 1px solid var(--line); }
+    > ul { margin: 10px 14px 12px; padding-left: 1.2em; font-size: 14px; }
+    > pre {
+      margin: 0; padding: 12px 14px; overflow-x: auto;
+      font-family: var(--mono); font-size: 12.5px; line-height: 1.65; white-space: pre-wrap;
+    }
+  }
+  .old > .h { background: var(--panel-2); color: var(--fg-faint); }
+  .new > .h { background: var(--accent-bg); color: var(--accent-2); }
+}
+
+/* 练习 */
 .exercise {
-  background: var(--bg-panel);
-  border: 1px dashed var(--accent);
-  border-radius: var(--radius);
-  padding: 14px 18px;
-  margin: 18px 0;
-}
-.exercise .label { color: var(--accent-text); font-weight: 700; font-size: 13px; }
+  border: 1px dashed var(--accent); background: var(--accent-bg);
+  border-radius: var(--radius); padding: 16px 20px; margin: 30px 0 0;
 
-.quiz { list-style: none; padding-left: 0; }
-.quiz li {
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 10px 14px;
-  margin: 8px 0;
+  h3 { margin: 0 0 8px; color: var(--accent-2); font-size: 16px; }
+  :is(p, ol, ul):last-child { margin-bottom: 0; }
 }
-.quiz .q { font-weight: 600; }
-.quiz .a { color: var(--text-dim); margin-top: 6px; font-size: 14px; display: none; }
-.quiz li.open .a { display: block; }
-.quiz .q::before { content: "▸ "; color: var(--accent); }
 
-.pagenav {
-  display: flex;
-  justify-content: space-between;
-  gap: 14px;
-  margin-top: 56px;
-  padding-top: 20px;
-  border-top: 1px solid var(--border);
-  font-size: 14px;
-}
-.pagenav a {
-  text-decoration: none;
-  color: var(--text);
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 10px 16px;
-  flex: 1;
-  box-shadow: var(--shadow);
-}
-.pagenav a:hover { border-color: var(--accent); }
-.pagenav .lbl { display: block; font-size: 11px; color: var(--text-dim); margin-bottom: 2px; }
-.pagenav .next { text-align: right; }
+/* 自测题：点击题目展开答案 */
+.quiz {
+  list-style: none; padding-left: 0;
 
-.toc-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 14px;
-  margin: 22px 0;
+  > li {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 11px 16px; margin: 10px 0;
+    cursor: pointer;
+
+    &:hover { border-color: var(--accent); }
+    &::before {
+      content: "▸"; display: inline-block; width: 1.1em;
+      color: var(--accent); transition: transform .15s ease;
+    }
+    &.open::before { transform: rotate(90deg); }
+  }
+  .q { font-weight: 600; }
+  .a {
+    display: none; cursor: auto;
+    margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line);
+    color: var(--fg-soft); font-size: 14.5px; font-weight: 400;
+  }
+  li.open .a { display: block; }
 }
+
+/* 章节导航 */
+.pager {
+  display: flex; gap: 12px; margin-top: 54px; padding-top: 22px; border-top: 1px solid var(--line);
+
+  a {
+    flex: 1 1 0; padding: 12px 16px; border: 1px solid var(--line);
+    border-radius: var(--radius); background: var(--panel);
+    text-decoration: none; color: var(--fg); font-size: 14px;
+
+    &:hover { border-color: var(--accent); }
+    span { display: block; font-size: 11.5px; color: var(--fg-faint); margin-bottom: 2px; }
+    &.next { text-align: right; }
+  }
+}
+
+/* 首页 */
+.hero {
+  border: 1px solid var(--line); background: var(--panel);
+  border-radius: 16px; padding: 34px 34px 30px; margin-bottom: 30px;
+
+  h1 { font-size: 34px; }
+  .sub { font-size: 18px; color: var(--fg-soft); margin: 8px 0 0; }
+
+  @media (width <= 700px) { padding: 24px 20px; h1 { font-size: 28px; } }
+}
+.pill {
+  display: inline-block; font-size: 12px; padding: 3px 10px; border-radius: 20px;
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--fg-soft);
+  margin: 3px 5px 3px 0;
+}
+.toc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 .toc-card {
-  display: block;
-  text-decoration: none;
-  color: var(--text);
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px 18px;
-  box-shadow: var(--shadow);
-  transition: transform 0.12s ease, border-color 0.12s ease;
+  display: block; text-decoration: none; color: inherit;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 13px 16px;
+
+  &:hover { border-color: var(--accent); background: var(--accent-bg); }
+  .n { font-size: 11px; letter-spacing: .1em; color: var(--accent); font-weight: 700; }
+  .t { font-weight: 700; font-size: 15.5px; margin: 2px 0 3px; }
+  .d { font-size: 13.5px; color: var(--fg-soft); line-height: 1.6; }
 }
-.toc-card:hover { transform: translateY(-2px); border-color: var(--accent); }
-.toc-card .num { font-size: 12px; color: var(--accent-text); font-weight: 700; }
-.toc-card .ttl { font-size: 16px; font-weight: 700; margin: 4px 0 6px; }
-.toc-card .desc { font-size: 13px; color: var(--text-dim); }
-.toc-part {
-  margin: 34px 0 6px;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: var(--text-dim);
-  text-transform: uppercase;
-}
+.note-small { margin-top: 40px; font-size: 13px; color: var(--fg-faint); }
 </style>
 </head>
-<body>
-<div class="topbar">
-  <a href="index.html">&larr; 全部章节</a>
-  <span>AspectJ in Action · 图解笔记</span>
-</div>
-<div class="page">
+<body data-page="ch06">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><marker id="ar-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--accent)"/></marker><marker id="ar-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--green)"/></marker><marker id="ar-r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--red)"/></marker></defs></svg>
+<div id="app">
+<aside id="sidebar"></aside>
+<main>
 
-  <span class="kicker">CHAPTER 06</span>
+  <span class="chapter-eyebrow">第 6 章</span>
   <h1>把切面拼在一起</h1>
-  <p class="subtitle">一句话概括本章：前面几章讲了切面能做什么，这一章讲切面自己是怎么“活”的——什么时候创建实例、多个切面谁先谁后、以及一些很少用但要认识的高级特性。</p>
+  <p class="lede">一句话概括本章：前面几章讲了切面能做什么，这一章讲切面自己是怎么“活”的——什么时候创建实例、多个切面谁先谁后、以及一些很少用但要认识的高级特性。</p>
 
-  <div class="covers">
+  <div class="goals">
     <h4>本章你将学到</h4>
     <ul>
       <li>切面到底是不是普通对象？它的实例什么时候被创建</li>
@@ -342,15 +448,17 @@ table.tbl th { background: var(--bg-code-header); }
     </ul>
   </div>
 
+  <div id="chapter-toc"></div>
+
   <h2>1. 切面也是对象，只是创建方式很特别</h2>
   <p>
     你可能已经注意到，前几章的切面里可以写字段、写普通方法，几乎和类一样。没错——<strong>切面在运行时也是一个对象</strong>，
-    只不过它的实例化时机不像普通对象那样由 <code class="inline">new</code> 决定，而是由 AspectJ 织入器根据“关联策略”自动创建。
+    只不过它的实例化时机不像普通对象那样由 <code>new</code> 决定，而是由 AspectJ 织入器根据“关联策略”自动创建。
     这一点很关键：如果你想在切面里存状态（比如一个计数器、一把锁），就必须先搞清楚这个切面到底有几个实例、分别绑定给谁。
   </p>
 
-  <div class="callout tip">
-    <span class="label">💡 类比</span>
+  <div class="box tip">
+    <div class="t">💡 类比</div>
     <p>
       普通对象像“自己去银行开户”——你主动 new 一个。切面更像“信用卡自动续期”——银行（织入器）按照你选的套餐
       （关联策略：单例 / 每个对象一张 / 每次通话一张……）在后台自动帮你办好，你只管用。
@@ -360,49 +468,48 @@ table.tbl th { background: var(--bg-code-header); }
   <h2>2. 五种关联（association）策略</h2>
   <p>默认情况下，一个切面在整个程序里只有<strong>一个实例</strong>（单例），所有匹配的连接点都共享这一份状态。但你可以用下面几种关键字改变这一点：</p>
 
-  <table class="tbl">
+  <div class="tw"><table>
     <tr><th>关联方式</th><th>含义</th><th>典型场景</th></tr>
-    <tr><td><code class="inline">（默认，不写）</code></td><td>全局唯一一个切面实例</td><td>日志、监控这类无状态或全局共享状态的切面</td></tr>
-    <tr><td><code class="inline">perthis(切点)</code></td><td>每个"执行对象（this）"一个切面实例</td><td>要给每个业务对象维护独立状态，比如每个账户一把锁</td></tr>
-    <tr><td><code class="inline">pertarget(切点)</code></td><td>每个"目标对象（target）"一个切面实例</td><td>和 perthis 类似，用于代理场景下 this≠target 的情况</td></tr>
-    <tr><td><code class="inline">percflow(切点)</code></td><td>每次进入这段调用链（一次外部调用）一个实例</td><td>一次事务、一次请求内共享的上下文，如事务管理</td></tr>
-    <tr><td><code class="inline">pertypewithin(类型模式)</code></td><td>每个匹配到的"类"一个切面实例（不是每个对象）</td><td>按类统计信息，比如给每个 Service 类维护调用计数</td></tr>
-  </table>
+    <tr><td><code>（默认，不写）</code></td><td>全局唯一一个切面实例</td><td>日志、监控这类无状态或全局共享状态的切面</td></tr>
+    <tr><td><code>perthis(切点)</code></td><td>每个"执行对象（this）"一个切面实例</td><td>要给每个业务对象维护独立状态，比如每个账户一把锁</td></tr>
+    <tr><td><code>pertarget(切点)</code></td><td>每个"目标对象（target）"一个切面实例</td><td>和 perthis 类似，用于代理场景下 this≠target 的情况</td></tr>
+    <tr><td><code>percflow(切点)</code></td><td>每次进入这段调用链（一次外部调用）一个实例</td><td>一次事务、一次请求内共享的上下文，如事务管理</td></tr>
+    <tr><td><code>pertypewithin(类型模式)</code></td><td>每个匹配到的"类"一个切面实例（不是每个对象）</td><td>按类统计信息，比如给每个 Service 类维护调用计数</td></tr>
+  </table></div>
 
-  <div class="diagram">
-    <svg viewBox="0 0 640 260" xmlns="http://www.w3.org/2000/svg">
+  <figure><svg class="dgm" viewBox="0 0 640 260" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <marker id="arrow-ch06-1" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
           <path d="M0,0 L6,3 L0,6 Z" fill="currentColor" />
         </marker>
       </defs>
       <text x="150" y="24" text-anchor="middle" font-size="13" font-weight="700">默认：单例切面</text>
-      <rect class="accentbox" x="100" y="40" width="100" height="40" rx="8"/>
+      <rect class="bx-a" x="100" y="40" width="100" height="40" rx="8"/>
       <text x="150" y="65" text-anchor="middle" font-size="12">切面实例</text>
-      <rect class="box" x="20" y="140" width="70" height="40" rx="6"/><text x="55" y="164" text-anchor="middle" font-size="11">账户A</text>
-      <rect class="box" x="115" y="140" width="70" height="40" rx="6"/><text x="150" y="164" text-anchor="middle" font-size="11">账户B</text>
-      <rect class="box" x="210" y="140" width="70" height="40" rx="6"/><text x="245" y="164" text-anchor="middle" font-size="11">账户C</text>
-      <path class="arrow" d="M150,80 L55,138" marker-end="url(#arrow-ch06-1)"/>
-      <path class="arrow" d="M150,80 L150,138" marker-end="url(#arrow-ch06-1)"/>
-      <path class="arrow" d="M150,80 L245,138" marker-end="url(#arrow-ch06-1)"/>
+      <rect class="bx" x="20" y="140" width="70" height="40" rx="6"/><text x="55" y="164" text-anchor="middle" font-size="11">账户A</text>
+      <rect class="bx" x="115" y="140" width="70" height="40" rx="6"/><text x="150" y="164" text-anchor="middle" font-size="11">账户B</text>
+      <rect class="bx" x="210" y="140" width="70" height="40" rx="6"/><text x="245" y="164" text-anchor="middle" font-size="11">账户C</text>
+      <path class="ln" d="M150,80 L55,138" marker-end="url(#arrow-ch06-1)"/>
+      <path class="ln" d="M150,80 L150,138" marker-end="url(#arrow-ch06-1)"/>
+      <path class="ln" d="M150,80 L245,138" marker-end="url(#arrow-ch06-1)"/>
       <text x="150" y="215" text-anchor="middle" font-size="11" class="dim">一份实例，服务所有对象——状态是"全体共享"的</text>
 
       <text x="490" y="24" text-anchor="middle" font-size="13" font-weight="700">perthis()：每对象一个实例</text>
-      <rect class="box" x="410" y="140" width="70" height="40" rx="6"/><text x="445" y="164" text-anchor="middle" font-size="11">账户A</text>
-      <rect class="box" x="505" y="140" width="70" height="40" rx="6"/><text x="540" y="164" text-anchor="middle" font-size="11">账户B</text>
-      <rect class="box" x="600" y="140" width="30" height="40" rx="6"/>
-      <rect class="accentbox" x="410" y="60" width="70" height="36" rx="8"/><text x="445" y="83" text-anchor="middle" font-size="11">切面①</text>
-      <rect class="accentbox" x="505" y="60" width="70" height="36" rx="8"/><text x="540" y="83" text-anchor="middle" font-size="11">切面②</text>
-      <path class="arrow" d="M445,96 L445,138" marker-end="url(#arrow-ch06-1)"/>
-      <path class="arrow" d="M540,96 L540,138" marker-end="url(#arrow-ch06-1)"/>
+      <rect class="bx" x="410" y="140" width="70" height="40" rx="6"/><text x="445" y="164" text-anchor="middle" font-size="11">账户A</text>
+      <rect class="bx" x="505" y="140" width="70" height="40" rx="6"/><text x="540" y="164" text-anchor="middle" font-size="11">账户B</text>
+      <rect class="bx" x="600" y="140" width="30" height="40" rx="6"/>
+      <rect class="bx-a" x="410" y="60" width="70" height="36" rx="8"/><text x="445" y="83" text-anchor="middle" font-size="11">切面①</text>
+      <rect class="bx-a" x="505" y="60" width="70" height="36" rx="8"/><text x="540" y="83" text-anchor="middle" font-size="11">切面②</text>
+      <path class="ln" d="M445,96 L445,138" marker-end="url(#arrow-ch06-1)"/>
+      <path class="ln" d="M540,96 L540,138" marker-end="url(#arrow-ch06-1)"/>
       <text x="490" y="215" text-anchor="middle" font-size="11" class="dim">每个对象配一个专属实例——状态互不干扰</text>
     </svg>
-    <div class="caption">图 6-1　默认单例关联 vs. perthis() 每对象一个实例：状态是否共享，完全取决于关联策略</div>
-  </div>
+    <figcaption>图 6-1　默认单例关联 vs. perthis() 每对象一个实例：状态是否共享，完全取决于关联策略</figcaption>
+  </figure>
 
-  <p>书中用一个账户操作的例子展示 <code class="inline">pertypewithin</code>——注意它是“每个类”一个实例，不是“每个对象”：</p>
+  <p>书中用一个账户操作的例子展示 <code>pertypewithin</code>——注意它是“每个类”一个实例，不是“每个对象”：</p>
   <div class="code">
-    <div class="file">ch06/workspace/Section6.2.4PerTypeAssociation — AssociationDemoAspect.aj</div>
+    <div class="bar"><span class="tag">ch06/workspace/Section6.2.4PerTypeAssociation — AssociationDemoAspect.aj</span></div>
     <pre><code><span class="tok-kw">public aspect</span> AssociationDemoAspect <span class="tok-kw">pertypewithin</span>(Account+) {
     <span class="tok-kw">public</span> AssociationDemoAspect() {
         System.out.println(<span class="tok-str">"Creating aspect instance"</span>);
@@ -423,10 +530,10 @@ table.tbl th { background: var(--bg-code-header); }
   <h2>3. 谁先执行：切面优先级（precedence）</h2>
   <p>
     当两个切面的通知同时命中同一个连接点（比如“进门”这个动作，既触发安防切面又触发节能切面），谁先执行、谁后执行？
-    默认顺序不可依赖，AspectJ 提供 <code class="inline">declare precedence</code> 让你显式声明顺序：
+    默认顺序不可依赖，AspectJ 提供 <code>declare precedence</code> 让你显式声明顺序：
   </p>
   <div class="code">
-    <div class="file">ch06/workspace/Section6.3.2ExplicitAspectPrecedence — 三个文件精简展示</div>
+    <div class="bar"><span class="tag">ch06/workspace/Section6.3.2ExplicitAspectPrecedence — 三个文件精简展示</span></div>
     <pre><code><span class="tok-kw">public aspect</span> HomeSecurityAspect {
     <span class="tok-kw">before</span>() : execution(<span class="tok-kw">void</span> Home.exit()) { System.out.println(<span class="tok-str">"Engaging"</span>); }
     <span class="tok-kw">after</span>()  : execution(<span class="tok-kw">void</span> Home.enter()) { System.out.println(<span class="tok-str">"Disengaging"</span>); }
@@ -443,27 +550,26 @@ table.tbl th { background: var(--bg-code-header); }
 }</code></pre>
   </div>
 
-  <div class="diagram">
-    <svg viewBox="0 0 640 260" xmlns="http://www.w3.org/2000/svg">
+  <figure><svg class="dgm" viewBox="0 0 640 260" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <marker id="arrow-ch06-2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
           <path d="M0,0 L6,3 L0,6 Z" fill="currentColor" />
         </marker>
       </defs>
-      <circle class="oldbox" cx="320" cy="140" r="115"/>
-      <circle class="accentbox" cx="320" cy="140" r="70"/>
-      <circle class="box" cx="320" cy="140" r="26"/>
+      <circle class="bx-r" cx="320" cy="140" r="115"/>
+      <circle class="bx-a" cx="320" cy="140" r="70"/>
+      <circle class="bx" cx="320" cy="140" r="26"/>
       <text x="320" y="35" text-anchor="middle" font-size="12">外层先执行：HomeSecurityAspect（before）</text>
       <text x="320" y="90" text-anchor="middle" font-size="11">SaveEnergyAspect（before）</text>
       <text x="320" y="146" text-anchor="middle" font-size="11" font-weight="700">home.exit()</text>
-      <path class="arrow-accent" d="M430,140 A115,115 0 0 1 320,25" marker-end="url(#arrow-ch06-2)"/>
+      <path class="ln-a" d="M430,140 A115,115 0 0 1 320,25" marker-end="url(#ar-a)"/>
     </svg>
-    <div class="caption">图 6-2　declare precedence 决定“同心圆”从外到内的顺序：HomeSecurityAspect 在外层，先于 SaveEnergyAspect 执行（同一个 around 类比第 4 章的洋葱模型）</div>
-  </div>
+    <figcaption>图 6-2　declare precedence 决定“同心圆”从外到内的顺序：HomeSecurityAspect 在外层，先于 SaveEnergyAspect 执行（同一个 around 类比第 4 章的洋葱模型）</figcaption>
+  </figure>
 
   <p>同一个切面内部，多条通知命中同一个连接点时，也有明确规则（同类型通知按声明顺序，around 会把 before/after 包在里面）：</p>
   <div class="code">
-    <div class="file">ch06/workspace/Section6.3.3OrderingOfAdviceInSingleAspect — InterAdvicePrecedenceAspect.aj</div>
+    <div class="bar"><span class="tag">ch06/workspace/Section6.3.3OrderingOfAdviceInSingleAspect — InterAdvicePrecedenceAspect.aj</span></div>
     <pre><code><span class="tok-kw">public aspect</span> InterAdvicePrecedenceAspect {
     <span class="tok-kw">public pointcut</span> performCall() : call(* Main.perform());
 
@@ -482,37 +588,37 @@ table.tbl th { background: var(--bg-code-header); }
 
   <h2>4. privileged 切面：访问私有成员的“特权”</h2>
   <p>
-    正常情况下，切面和普通类一样，不能访问其他类的 <code class="inline">private</code> 成员。<code class="inline">privileged</code>
+    正常情况下，切面和普通类一样，不能访问其他类的 <code>private</code> 成员。<code>privileged</code>
     关键字可以打破这层封装，让切面直接读写目标类的私有字段——书里主要用来做一些调试/测试场景下的“越权”访问。
   </p>
 
-  <div class="callout warn">
-    <span class="label">⚠️ 现代实践建议</span>
+  <div class="box warn">
+    <div class="t">⚠️ 现代实践建议</div>
     <p>
-      在现代代码库里，<code class="inline">privileged</code> 切面几乎不推荐使用：它破坏了封装性，让代码的实际行为脱离了类本身的文档和契约，
+      在现代代码库里，<code>privileged</code> 切面几乎不推荐使用：它破坏了封装性，让代码的实际行为脱离了类本身的文档和契约，
       调试和重构都会变得更难。此外，Java 9+ 的模块系统（JPMS）对跨模块反射访问私有成员做了更严格的限制，
-      如果目标类在别的模块里，即使用了 <code class="inline">privileged</code>，也可能因为模块没有 <code class="inline">opens</code>
+      如果目标类在别的模块里，即使用了 <code>privileged</code>，也可能因为模块没有 <code>opens</code>
       给你的切面所在模块而在运行时失败。如果只是想在测试里检查私有状态，优先考虑包内可见的测试辅助方法，而不是 privileged 切面。
     </p>
   </div>
 
-  <div class="callout modern">
-    <span class="label">🔧 小结一下现代取舍</span>
+  <div class="box key">
+    <div class="t">🔧 小结一下现代取舍</div>
     <p>
       日常业务开发中，<strong>90% 的场景用默认单例关联就够了</strong>（日志、监控、事务边界通知等都是无状态或用
-      ThreadLocal/请求上下文管理状态）。<code class="inline">perthis</code>/<code class="inline">percflow</code> 这类更细粒度的关联，
-      多在你确实需要“每个对象/每次调用独立状态”且不方便用 ThreadLocal 时才考虑。<code class="inline">declare precedence</code>
+      ThreadLocal/请求上下文管理状态）。<code>perthis</code>/<code>percflow</code> 这类更细粒度的关联，
+      多在你确实需要“每个对象/每次调用独立状态”且不方便用 ThreadLocal 时才考虑。<code>declare precedence</code>
       则建议只要项目里有两个以上切面可能命中同一个连接点，就显式声明一下顺序，不要依赖“凑巧能跑”的默认顺序。
     </p>
   </div>
 
   <div class="exercise">
-    <span class="label">✏️ 动手练习</span>
+    <h3>✏️ 动手练习</h3>
     <p>
-      运行仓库 <code class="inline">ch06/workspace/Section6.3.3OrderingOfAdviceInSingleAspect</code>，
+      运行仓库 <code>ch06/workspace/Section6.3.3OrderingOfAdviceInSingleAspect</code>，
       对照实际打印的顺序验证上面这段代码的执行顺序；再打开
-      <code class="inline">ch06/workspace/Section6.3.2ExplicitAspectPrecedence</code>，
-      试着删掉 <code class="inline">declare precedence</code> 那一行，看看输出顺序是否还稳定。
+      <code>ch06/workspace/Section6.3.2ExplicitAspectPrecedence</code>，
+      试着删掉 <code>declare precedence</code> 那一行，看看输出顺序是否还稳定。
     </p>
   </div>
 
@@ -532,16 +638,143 @@ table.tbl th { background: var(--bg-code-header); }
     </li>
   </ul>
 
-  <div class="pagenav">
-    <a class="prev" href="ch05.html"><span class="lbl">上一章</span>第 5 章：用静态切面修改结构</a>
-    <a class="next" href="ch07.html"><span class="lbl">下一章</span>第 7 章：深入 @AspectJ 注解语法</a>
+  <div class="pager">
+    <a class="prev" href="ch05.html"><span>上一章</span>第 5 章：用静态切面修改结构</a>
+    <a class="next" href="ch07.html"><span>下一章</span>第 7 章：深入 @AspectJ 注解语法</a>
   </div>
+</main>
 </div>
 <script>
-document.addEventListener("click", function (e) {
-  var q = e.target.closest(".quiz .q");
-  if (q) q.parentElement.classList.toggle("open");
-});
+/* ================================================================
+   AspectJ in Action 图解笔记 · 页面脚本：侧边栏、目录、代码块、主题、自测题
+   ================================================================ */
+// 保持经典 <script> 而不是 type="module"：模块脚本在 file:// 下会被浏览器拦截，
+// 而这些页面经常是直接双击打开的。
+(() => {
+  'use strict';
+
+  const CHAPTERS = [
+    { id: 'ch01', n: '1',  t: '发现 AOP',              part: '第一部分 · 理解 AOP 与 AspectJ' },
+    { id: 'ch02', n: '2',  t: '初识 AspectJ' },
+    { id: 'ch03', n: '3',  t: '理解连接点模型' },
+    { id: 'ch04', n: '4',  t: '用动态切面修改行为' },
+    { id: 'ch05', n: '5',  t: '用静态切面修改结构' },
+    { id: 'ch06', n: '6',  t: '把切面拼在一起' },
+    { id: 'ch07', n: '7',  t: '深入 @AspectJ 注解语法' },
+    { id: 'ch08', n: '8',  t: 'AspectJ 的织入方式' },
+    { id: 'ch09', n: '9',  t: '与 Spring 集成' },
+    { id: 'ch10', n: '10', t: '监控类切面',            part: '第二部分 · 解决实际问题' },
+    { id: 'ch11', n: '11', t: '用切面强制执行规范' },
+    { id: 'ch12', n: '12', t: '切面设计模式' },
+    { id: 'ch13', n: '13', t: '并发控制' },
+    { id: 'ch14', n: '14', t: '事务管理' },
+    { id: 'ch15', n: '15', t: '应用安全' },
+    { id: 'ch16', n: '16', t: '改善领域逻辑' },
+    { id: 'ch17', n: '17', t: '迈出下一步' },
+    { id: 'appendixA',  n: 'A',   t: '搭建示例工程',      part: '附录' },
+    { id: 'appendixBC', n: 'B/C', t: '构建工具：Ant vs. Maven' }
+  ];
+
+  const cur = document.body.dataset.page || '';
+
+  /* ---------- 侧边栏 ---------- */
+  const side = document.getElementById('sidebar');
+  if (side) {
+    const brand = '<a class="brand" href="index.html"><span class="logo">AJ</span>' +
+      '<span>AspectJ 图解笔记<small>AspectJ in Action · 现代化重读</small></span></a>';
+    const links = CHAPTERS.map(({ id, n, t, part }) =>
+      (part ? `<div class="part">${part}</div>` : '') +
+      `<a class="ch${id === cur ? ' active' : ''}" href="${id}.html"><span class="n">${n}</span><span>${t}</span></a>`
+    );
+    side.innerHTML = brand + links.join('');
+    const active = side.querySelector('a.ch.active');
+    if (active) setTimeout(() => active.scrollIntoView({ block: 'center' }), 0);
+  }
+
+  /* ---------- 移动端菜单 ---------- */
+  const btn = Object.assign(document.createElement('button'), {
+    id: 'menu-btn',
+    type: 'button',
+    innerHTML: '&#9776;',
+    onclick: () => document.body.classList.toggle('nav-open')
+  });
+  btn.setAttribute('aria-label', '目录');
+  document.body.appendChild(btn);
+  document.addEventListener('click', (e) => {
+    if (document.body.classList.contains('nav-open') &&
+        side && !side.contains(e.target) && e.target !== btn) {
+      document.body.classList.remove('nav-open');
+    }
+  });
+
+  /* ---------- 主题切换 ---------- */
+  const THEME_KEY = 'ajia-doc-theme';
+  const tbtn = Object.assign(document.createElement('button'), {
+    id: 'theme-btn',
+    type: 'button',
+    innerHTML: '&#9789;',
+    onclick: () => {
+      const root = document.documentElement;
+      const now = root.getAttribute('data-theme');
+      const dark = now ? now === 'dark'
+        : window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const next = dark ? 'light' : 'dark';
+      root.setAttribute('data-theme', next);
+      try { localStorage.setItem(THEME_KEY, next); } catch {}
+    }
+  });
+  tbtn.setAttribute('aria-label', '切换深浅色');
+  document.body.appendChild(tbtn);
+  try {
+    const saved = localStorage.getItem(THEME_KEY);
+    if (saved) document.documentElement.setAttribute('data-theme', saved);
+  } catch {}
+
+  /* ---------- 章节内目录 ---------- */
+  const main = document.querySelector('main');
+  const slot = document.getElementById('chapter-toc');
+  if (slot && main) {
+    const hs = [...main.querySelectorAll('h2')];
+    if (hs.length > 2) {
+      const items = hs.map((h, i) => {
+        if (!h.id) h.id = `sec-${i + 1}`;
+        return `<li><a href="#${h.id}">${h.textContent.replace(/^\d+\.\s*/, '')}</a></li>`;
+      });
+      slot.className = 'toc';
+      slot.innerHTML = `<div class="h">本章目录</div><ol>${items.join('')}</ol>`;
+    }
+  }
+
+  /* ---------- 代码块：复制按钮 ---------- */
+  document.querySelectorAll('.code').forEach((box) => {
+    const pre = box.querySelector('pre');
+    if (!pre) return;
+    let bar = box.querySelector(':scope > .bar');
+    if (!bar) {
+      bar = Object.assign(document.createElement('div'), { className: 'bar' });
+      bar.innerHTML = '<span class="tag">code</span>';
+      box.insertBefore(bar, pre);
+    }
+    const cp = Object.assign(document.createElement('button'), {
+      className: 'copy',
+      type: 'button',
+      textContent: '复制'
+    });
+    cp.onclick = () => {
+      navigator.clipboard?.writeText(pre.textContent);
+      cp.textContent = '已复制';
+      setTimeout(() => { cp.textContent = '复制'; }, 1400);
+    };
+    bar.appendChild(cp);
+  });
+
+  /* ---------- 自测题：点击题目展开 / 收起答案 ---------- */
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('.quiz .a')) return;   // 允许在答案里选中文字
+    const li = e.target.closest('.quiz > li');
+    if (li) li.classList.toggle('open');
+  });
+})();
 </script>
 </body>
 </html>
